@@ -17,12 +17,24 @@ type SunTimes = {
   blueHourEveningEnd: Date;
 };
 
+type TwilightCloud = {
+  label: "Dawn" | "Dusk";
+  date: Date;
+  low: number;
+  mid: number;
+  high: number;
+};
+
 function fmt(date: Date): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function fmtRange(start: Date, end: Date): string {
   return `${fmt(start)} – ${fmt(end)}`;
+}
+
+function fmtDayTime(date: Date): string {
+  return date.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 function calcTimes(lat: number, lng: number, date: Date): SunTimes {
@@ -42,6 +54,83 @@ function calcTimes(lat: number, lng: number, date: Date): SunTimes {
   };
 }
 
+// Finds the next 4 dawn/dusk moments starting from now, within the next 48
+// hours, then looks up the nearest-hour low/mid/high cloud cover for each
+// from Open-Meteo (same free, no-key API used in the Atlanta-Golden-Hour-
+// Clouds project, matched to the nearest hourly timestamp).
+async function fetchTwilightCloudCover(lat: number, lng: number): Promise<TwilightCloud[]> {
+  const now = new Date();
+  const windowEnd = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+  const candidates: { label: "Dawn" | "Dusk"; date: Date }[] = [];
+  for (let dayOffset = 0; dayOffset <= 2; dayOffset++) {
+    const base = new Date(now);
+    base.setDate(base.getDate() + dayOffset);
+    base.setHours(12, 0, 0, 0);
+    const t = SunCalc.getTimes(base, lat, lng);
+    if (t.dawn instanceof Date && !isNaN(t.dawn.getTime())) {
+      candidates.push({ label: "Dawn", date: t.dawn });
+    }
+    if (t.dusk instanceof Date && !isNaN(t.dusk.getTime())) {
+      candidates.push({ label: "Dusk", date: t.dusk });
+    }
+  }
+
+  const upcoming = candidates
+    .filter((c) => c.date > now && c.date <= windowEnd)
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .slice(0, 4);
+
+  const url =
+    "https://api.open-meteo.com/v1/forecast" +
+    `?latitude=${lat}&longitude=${lng}` +
+    "&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high" +
+    "&forecast_days=3&timezone=auto";
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error("Could not load cloud cover forecast.");
+  }
+  const data = await res.json();
+  const hourlyTimes: Date[] = data.hourly.time.map((t: string) => new Date(t));
+  const low: number[] = data.hourly.cloud_cover_low;
+  const mid: number[] = data.hourly.cloud_cover_mid;
+  const high: number[] = data.hourly.cloud_cover_high;
+
+  function nearestIndex(target: Date): number {
+    let bestIdx = 0;
+    let bestDiff = Infinity;
+    for (let i = 0; i < hourlyTimes.length; i++) {
+      const diff = Math.abs(hourlyTimes[i].getTime() - target.getTime());
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  }
+
+  return upcoming.map((c) => {
+    const idx = nearestIndex(c.date);
+    return { label: c.label, date: c.date, low: low[idx], mid: mid[idx], high: high[idx] };
+  });
+}
+
+async function fetchCityState(lat: number, lng: number): Promise<string | null> {
+  const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const data = await res.json();
+  const city = data.city || data.locality || "";
+  let region = data.principalSubdivision || "";
+  if (data.countryCode === "US" && typeof data.principalSubdivisionCode === "string") {
+    const parts = data.principalSubdivisionCode.split("-");
+    if (parts[1]) region = parts[1];
+  }
+  const label = [city, region].filter(Boolean).join(", ");
+  return label || null;
+}
+
 type TimeRowProps = { label: string; value: string; color: string; note?: string };
 
 function TimeRow({ label, value, color, note }: TimeRowProps) {
@@ -56,22 +145,50 @@ function TimeRow({ label, value, color, note }: TimeRowProps) {
   );
 }
 
+function CloudTable({ entries }: { entries: TwilightCloud[] }) {
+  return (
+    <table className="w-full text-sm border-separate border-spacing-y-1.5">
+      <thead>
+        <tr className="text-gray-500 text-xs uppercase tracking-wide">
+          <th className="text-left font-normal pb-1 px-3">Event</th>
+          <th className="text-right font-normal pb-1 px-3">Low</th>
+          <th className="text-right font-normal pb-1 px-3">Mid</th>
+          <th className="text-right font-normal pb-1 px-3">High</th>
+        </tr>
+      </thead>
+      <tbody>
+        {entries.map((entry, i) => (
+          <tr key={`${entry.label}-${entry.date.toISOString()}-${i}`} className="bg-gray-800">
+            <td className="py-3 px-3 rounded-l-lg">
+              <span className="font-medium text-white">{entry.label}</span>
+              <span className="ml-2 text-xs text-white/60">{fmtDayTime(entry.date)}</span>
+            </td>
+            <td className="py-3 px-3 text-right font-mono text-white">{Math.round(entry.low)}%</td>
+            <td className="py-3 px-3 text-right font-mono text-white">{Math.round(entry.mid)}%</td>
+            <td className="py-3 px-3 text-right font-mono text-white rounded-r-lg">
+              {Math.round(entry.high)}%
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 export default function GoldenHourCalculator() {
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [locationLabel, setLocationLabel] = useState<string>("");
+  const [cityState, setCityState] = useState<string | null>(null);
   const [manualLat, setManualLat] = useState("");
   const [manualLng, setManualLng] = useState("");
   const [geoError, setGeoError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [times, setTimes] = useState<SunTimes | null>(null);
-
-  useEffect(() => {
-    if (lat !== null && lng !== null) {
-      setTimes(calcTimes(lat, lng, new Date(date + "T12:00:00")));
-    }
-  }, [lat, lng, date]);
+  const [cloudForecast, setCloudForecast] = useState<TwilightCloud[] | null>(null);
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
 
   function detectLocation() {
     if (!navigator.geolocation) {
@@ -95,6 +212,49 @@ export default function GoldenHourCalculator() {
       }
     );
   }
+
+  // Ask for the user's location as soon as the app loads, rather than
+  // waiting for a button click.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial geolocation prompt on mount
+    detectLocation();
+  }, []);
+
+  useEffect(() => {
+    if (lat !== null && lng !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- deriving sun times from lat/lng/date
+      setTimes(calcTimes(lat, lng, new Date(date + "T12:00:00")));
+    }
+  }, [lat, lng, date]);
+
+  useEffect(() => {
+    if (lat === null || lng === null) return;
+    let cancelled = false;
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale label while a new lookup is in flight
+    setCityState(null);
+    fetchCityState(lat, lng).then((label) => {
+      if (!cancelled) setCityState(label);
+    });
+
+    setCloudLoading(true);
+    setCloudError(null);
+    fetchTwilightCloudCover(lat, lng)
+      .then((entries) => {
+        if (cancelled) return;
+        setCloudForecast(entries);
+        setCloudLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setCloudError(err instanceof Error ? err.message : "Could not load cloud cover.");
+        setCloudLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lat, lng]);
 
   function applyManual() {
     const la = parseFloat(manualLat);
@@ -157,8 +317,10 @@ export default function GoldenHourCalculator() {
         </div>
 
         {geoError && <p className="text-red-400 text-sm">{geoError}</p>}
-        {locationLabel && (
-          <p className="text-gray-500 text-xs">Location: {locationLabel}</p>
+        {(cityState || locationLabel) && (
+          <p className="text-gray-500 text-xs">
+            Location: {cityState ? cityState : locationLabel}
+          </p>
         )}
       </div>
 
@@ -215,6 +377,18 @@ export default function GoldenHourCalculator() {
         <p className="text-gray-600 text-sm text-center pt-4">
           Set a location above to see your golden hour times.
         </p>
+      )}
+
+      {/* Cloud cover for upcoming dawn/dusk */}
+      {(lat !== null && lng !== null) && (
+        <div className="space-y-2">
+          <h2 className="text-gray-400 text-sm uppercase tracking-widest mb-3 mt-5">
+            Cloud Cover — Next 48 Hours
+          </h2>
+          {cloudLoading && <p className="text-gray-600 text-sm">Loading forecast…</p>}
+          {cloudError && <p className="text-red-400 text-sm">{cloudError}</p>}
+          {cloudForecast && <CloudTable entries={cloudForecast} />}
+        </div>
       )}
     </div>
   );
