@@ -146,13 +146,6 @@ function fmtMiles(v: number | null): string {
   return `${v >= 10 ? Math.round(v) : v.toFixed(1)} mi`;
 }
 
-function todayLocalISO(): string {
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}
-
 async function fetchCityState(lat: number, lng: number): Promise<string | null> {
   const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`;
   const res = await fetch(url);
@@ -257,6 +250,56 @@ function fogPointLabel(points: number): string {
   return points === 2 ? "Favorable" : points === 1 ? "Possible" : "Limiting";
 }
 
+// Tooltip that opens on click/tap (hover doesn't exist on phones) and floats over the content
+// around it. Closes on a second tap, a tap anywhere else, or Escape.
+function ClickTip({
+  trigger,
+  triggerClassName,
+  panelClassName,
+  children,
+}: {
+  trigger: React.ReactNode;
+  triggerClassName: string;
+  panelClassName: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className={triggerClassName}>
+        {trigger}
+        <span aria-hidden className="ml-1.5 opacity-50">ⓘ</span>
+      </button>
+      {open && (
+        <div
+          role="tooltip"
+          className={`absolute z-30 rounded-lg bg-gray-900 text-white text-xs leading-relaxed shadow-xl max-w-[calc(100vw-2rem)] ${panelClassName}`}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FogBadge({ fog }: { fog: FogAssessment | null }) {
   if (!fog) {
     return <span className="text-xs text-gray-400">Fog: Not available</span>;
@@ -289,34 +332,29 @@ function FogBadge({ fog }: { fog: FogAssessment | null }) {
     },
   ];
 
-  // Shown on hover, and on keyboard focus / tap so it also works without a mouse.
   return (
     <div className="mb-3">
-      <div className="relative inline-block group">
-        <button
-          type="button"
-          className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap cursor-default ${FOG_BADGE_COLORS[fog.likelihood]}`}
-        >
-          Fog · {fog.likelihood}
-        </button>
-        <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 w-72 rounded-lg bg-gray-900 text-white text-xs leading-relaxed p-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity z-20 shadow-lg">
-          <p>{fog.reason}</p>
-          <div className="mt-2 pt-2 border-t border-gray-700 space-y-1.5">
-            {rows.map((r) => (
-              <div key={r.label} className="flex justify-between gap-4">
-                <span>
-                  {r.label}
-                  <span className="block text-gray-400 text-[10px]">{r.hint}</span>
-                </span>
-                <span className="font-semibold text-right whitespace-nowrap">
-                  {r.value}
-                  <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(r.points)}</span>
-                </span>
-              </div>
-            ))}
-          </div>
+      <ClickTip
+        trigger={<>Fog · {fog.likelihood}</>}
+        triggerClassName={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap cursor-pointer ${FOG_BADGE_COLORS[fog.likelihood]}`}
+        panelClassName="left-0 bottom-full mb-1.5 w-72 p-3"
+      >
+        <p>{fog.reason}</p>
+        <div className="mt-2 pt-2 border-t border-gray-700 space-y-1.5">
+          {rows.map((r) => (
+            <div key={r.label} className="flex justify-between gap-4">
+              <span>
+                {r.label}
+                <span className="block text-gray-400 text-[10px]">{r.hint}</span>
+              </span>
+              <span className="font-semibold text-right whitespace-nowrap">
+                {r.value}
+                <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(r.points)}</span>
+              </span>
+            </div>
+          ))}
         </div>
-      </div>
+      </ClickTip>
     </div>
   );
 }
@@ -372,31 +410,6 @@ function DownArrow() {
       strokeLinecap="round"
       strokeLinejoin="round"
     />
-  );
-}
-
-function ApertureIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
-      <path
-        d="M12 7.5 15 12l-3 4.5M9 7.5 6 12l3 4.5M7.5 9h9M7.5 15h9"
-        stroke="currentColor"
-        strokeWidth="1.1"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.7"
-      />
-    </svg>
-  );
-}
-
-function CalendarIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <rect x="3.5" y="5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M3.5 9.5h17M8 3v3.5M16 3v3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
   );
 }
 
@@ -527,10 +540,10 @@ function EventTile({
 
   return (
     <div className="border-t-[3px] border-indigo-500 pt-4 h-full flex flex-col">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
         <div className="flex items-center gap-2 min-w-0">
           <EventIcon kind={event.kind} />
-          <div className={`${SERIF} text-lg font-semibold text-gray-900 truncate`}>{event.headerLabel}</div>
+          <div className={`${SERIF} text-lg font-semibold text-gray-900 whitespace-nowrap`}>{event.headerLabel}</div>
           {event.moonIlluminationPercent != null && (
             <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
               {event.moonIlluminationPercent}% illum.
@@ -538,15 +551,14 @@ function EventTile({
           )}
         </div>
         {potential && (
-          <div className="relative shrink-0 group">
-            <span
-              className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap cursor-default ${POTENTIAL_BADGE_COLORS[potential.label]}`}
+          <div className="shrink-0 ml-auto">
+            <ClickTip
+              trigger={potential.label}
+              triggerClassName={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap cursor-pointer ${POTENTIAL_BADGE_COLORS[potential.label]}`}
+              panelClassName="right-0 top-full mt-1.5 w-56 p-2.5"
             >
-              {potential.label}
-            </span>
-            <div className="pointer-events-none absolute right-0 top-full mt-1.5 w-56 rounded-lg bg-gray-900 text-white text-xs leading-relaxed p-2.5 opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-lg">
               {potential.reason}
-            </div>
+            </ClickTip>
           </div>
         )}
       </div>
@@ -555,7 +567,7 @@ function EventTile({
           {event.timePoints.map((t, i) => (
             <div key={i} className="text-center px-1 min-w-0">
               <div className={`${SERIF} text-lg font-bold text-gray-900 tracking-tight truncate`}>{fmt(t.date)}</div>
-              <div className="text-xs text-gray-400 mt-0.5 truncate">{t.label}</div>
+              <div className="text-[11px] leading-tight text-gray-400 mt-0.5 whitespace-nowrap">{t.label}</div>
             </div>
           ))}
         </div>
@@ -647,9 +659,10 @@ function DayRow({
 
   return (
     <div className={`space-y-4 ${showDivider ? "pt-8 border-t border-gray-200" : ""}`}>
-      <h3 className={`${SERIF} text-xl font-semibold text-gray-900 flex items-baseline gap-3`}>
-        {label}
-        <span className="flex-1 h-px bg-gray-200" />
+      <h3
+        className={`${SERIF} text-2xl sm:text-3xl font-extrabold text-gray-900 text-center text-balance flex items-center gap-4 before:content-[''] before:flex-1 before:h-px before:bg-gray-200 after:content-[''] after:flex-1 after:h-px after:bg-gray-200`}
+      >
+        <span>{label}</span>
       </h3>
       {useSlider ? (
         <div className="flex gap-7 overflow-x-auto snap-x snap-mandatory pb-2">
@@ -669,7 +682,6 @@ function DayRow({
 }
 
 export default function GoldenHourCalculator() {
-  const [date, setDate] = useState(() => todayLocalISO());
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [cityState, setCityState] = useState<string | null>(null);
@@ -839,27 +851,8 @@ export default function GoldenHourCalculator() {
 
   return (
     <div className="max-w-[1040px] w-full mx-auto">
-      <div className="flex items-center justify-between gap-4 flex-wrap border-b border-gray-200 pb-3.5 mb-8">
-        <div className="flex items-center gap-2">
-          <ApertureIcon className="w-5 h-5 text-indigo-500" />
-          <span className={`${SERIF} font-semibold text-lg text-gray-900`}>Brooksl</span>
-          <span className="text-gray-300">·</span>
-          <span className="text-xs text-gray-400">Photo planning, next 4 sunrises & sunsets</span>
-        </div>
-
+      <div className="flex flex-col items-center gap-2 border-b border-gray-200 pb-3.5 mb-8">
         <div className="flex items-center gap-2.5">
-          <label className="flex items-center gap-1.5 border border-gray-200 rounded-full pl-3.5 pr-3 py-1.5 text-sm font-medium text-gray-700">
-            <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="bg-transparent outline-none w-[108px] [color-scheme:light]"
-            />
-          </label>
-
-          <div className="w-px h-5 bg-gray-200" />
-
           <div className="relative" ref={locationPopoverRef}>
             <button
               onClick={() => setLocationOpen((v) => !v)}
@@ -871,7 +864,7 @@ export default function GoldenHourCalculator() {
             </button>
 
             {locationOpen && (
-              <div className="absolute right-0 top-[calc(100%+8px)] w-80 bg-white border border-gray-200 rounded-xl shadow-xl p-2.5 z-30">
+              <div className="absolute left-1/2 -translate-x-1/2 top-[calc(100%+8px)] w-80 bg-white border border-gray-200 rounded-xl shadow-xl p-2.5 z-30">
                 <button
                   onClick={detectLocation}
                   disabled={loading}
@@ -910,6 +903,7 @@ export default function GoldenHourCalculator() {
             )}
           </div>
         </div>
+        <span className="text-xs text-gray-400">Photo planning, next 4 sunrises & sunsets</span>
       </div>
 
       {lat === null && lng === null && !loading && (
