@@ -40,9 +40,10 @@ type UnifiedEvent = {
 
 type PointWeatherPair = { pin: PointReading; tip: PointReading };
 
-type PotentialLabel = "Low Potential" | "Some Potential" | "High Potential" | "Very Promising!";
+type PotentialLabel = "Too Much Cloud Cover" | "Low Potential" | "Some Potential" | "High Potential" | "Very Promising!";
 
 const POTENTIAL_BADGE_COLORS: Record<PotentialLabel, string> = {
+  "Too Much Cloud Cover": "bg-gray-100 text-gray-500",
   "Low Potential": "bg-gray-100 text-gray-500",
   "Some Potential": "bg-amber-50 text-amber-700",
   "High Potential": "bg-emerald-50 text-emerald-700",
@@ -64,14 +65,16 @@ function computePotential(pointWeather: PointWeatherPair | null, fog: FogAssessm
   let tier: PotentialLabel;
   let reason: string;
   const totalCloud = cloudLow + cloudMid + cloudHigh;
-  if (totalCloud > 80 || cloudLow > 40 || precipAtPin > 80) {
+  if (totalCloud > 80) {
+    // Layers are summed, so this can top 100% -- it just means the sky is stacked with cloud.
+    tier = "Too Much Cloud Cover";
+    reason = `Too much cloud cover: low ${Math.round(cloudLow)}% + mid ${Math.round(cloudMid)}% + high ${Math.round(cloudHigh)}% totals ${Math.round(totalCloud)}% toward the event, leaving little room for color.`;
+  } else if (cloudLow > 40 || precipAtPin > 80) {
     tier = "Low Potential";
     if (precipAtPin > 80) {
       reason = `Poor: a ${Math.round(precipAtPin)}% chance of precipitation makes clear skies unlikely.`;
-    } else if (cloudLow > 40) {
-      reason = `Poor: low clouds cover ${Math.round(cloudLow)}% toward the event, likely blocking the horizon.`;
     } else {
-      reason = `Poor: the sky is ${Math.round(totalCloud)}% covered toward the event, leaving little room for color.`;
+      reason = `Poor: low clouds cover ${Math.round(cloudLow)}% toward the event, likely blocking the horizon.`;
     }
   } else if (cloudLow > 20 || precipAtPin > 40) {
     tier = "Some Potential";
@@ -80,25 +83,43 @@ function computePotential(pointWeather: PointWeatherPair | null, fog: FogAssessm
         ? `Middling: low clouds cover ${Math.round(cloudLow)}% toward the event, enough to partly obscure the horizon.`
         : `Middling: a ${Math.round(precipAtPin)}% chance of precipitation adds real uncertainty.`;
   } else {
-    const clearLow = cloudLow >= 0 && cloudLow <= 20;
+    // Low cloud is already <= 20% here. Mid and high clouds are what catch sunrise/sunset
+    // color, so judge how much of that canvas there is and whether the layers are usable.
+    const mid = Math.round(cloudMid);
+    const high = Math.round(cloudHigh);
     const midInRange = cloudMid >= 20 && cloudMid <= 80;
     const highInRange = cloudHigh >= 20 && cloudHigh <= 80;
-    if (clearLow && midInRange && highInRange) {
+    if (midInRange && highInRange) {
       if (fog?.likelihood === "Highly Favorable") {
         tier = "Very Promising!";
         reason = `Optimal: clear horizon with well-layered mid/high clouds to catch color, plus favorable fog for extra atmosphere.`;
       } else {
         tier = "High Potential";
-        reason = `Optimal: clear horizon (${Math.round(cloudLow)}% low cloud) with well-layered mid/high clouds (${Math.round(cloudMid)}%/${Math.round(cloudHigh)}%) to catch color.`;
+        reason = `Optimal: clear horizon (${Math.round(cloudLow)}% low cloud) with well-layered mid/high clouds (${mid}%/${high}%) to catch color.`;
+      }
+    } else if (midInRange || highInRange) {
+      // One good layer is enough to light up, even without the other.
+      tier = "Some Potential";
+      reason = midInRange
+        ? `Decent: ${mid}% mid cloud can catch color on its own, though with ${high}% high cloud there's little layering for depth.`
+        : `Decent: ${high}% high cloud can streak with color, though with ${mid}% mid cloud there's little layering for depth.`;
+    } else if (cloudMid + cloudHigh < 15) {
+      // Almost nothing to catch the light.
+      if (fog?.likelihood === "Highly Favorable") {
+        tier = "Some Potential";
+        reason = `Boring sky (${mid}% mid / ${high}% high) with little to catch color, but favorable fog could still add atmosphere.`;
+      } else {
+        tier = "Low Potential";
+        reason = `Boring: almost no mid or high cloud (${mid}% / ${high}%), so nothing to catch the color -- expect a plain, clear-sky gradient.`;
       }
     } else {
       tier = "Some Potential";
-      reason = `Middling: cloud layering is mixed -- not quite the clear-low, textured-high combination that makes for the best light.`;
+      reason = `Sparse: only ${mid}% mid / ${high}% high cloud, just a few wisps, so color will be limited.`;
     }
   }
 
   const visibilityMiles = pointWeather.pin.visibilityMiles;
-  if (visibilityMiles != null) {
+  if (visibilityMiles != null && tier !== "Too Much Cloud Cover") {
     if (visibilityMiles < 5) {
       // Heavy haze/murk washes out color and contrast regardless of cloud shape.
       tier = "Low Potential";
@@ -237,75 +258,65 @@ function fogPointLabel(points: number): string {
 }
 
 function FogBadge({ fog }: { fog: FogAssessment | null }) {
-  const [expanded, setExpanded] = useState(false);
-
   if (!fog) {
     return <span className="text-xs text-gray-400">Fog: Not available</span>;
   }
 
+  const rows = [
+    {
+      label: "Temp–dew point spread",
+      hint: "<2° favorable, <4° necessary",
+      value: fog.inputs.spreadF != null ? `${fog.inputs.spreadF.toFixed(1)}°F` : "Not available",
+      points: fog.spreadPoints,
+    },
+    {
+      label: "Relative humidity",
+      hint: ">95% favorable, >90% necessary",
+      value: fog.inputs.relativeHumidity != null ? `${Math.round(fog.inputs.relativeHumidity)}%` : "Not available",
+      points: fog.humidityPoints,
+    },
+    {
+      label: "Wind speed",
+      hint: "<5mph favorable, <10mph necessary",
+      value: fog.inputs.windSpeedMph != null ? `${Math.round(fog.inputs.windSpeedMph)} mph` : "Not available",
+      points: fog.windPoints,
+    },
+    {
+      label: "Cloud cover",
+      hint: "<20% favorable, <50% necessary",
+      value: fog.inputs.cloudCoverPercent != null ? `${Math.round(fog.inputs.cloudCoverPercent)}%` : "Not available",
+      points: fog.cloudPoints,
+    },
+  ];
+
+  // Shown on hover, and on keyboard focus / tap so it also works without a mouse.
   return (
     <div className="mb-3">
       <div className="relative inline-block group">
         <button
-          onClick={() => setExpanded((v) => !v)}
-          className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap transition-colors ${FOG_BADGE_COLORS[fog.likelihood]}`}
+          type="button"
+          className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap cursor-default ${FOG_BADGE_COLORS[fog.likelihood]}`}
         >
-          Fog · {fog.likelihood} {expanded ? "▾" : "▸"}
+          Fog · {fog.likelihood}
         </button>
-        {!expanded && (
-          <div className="pointer-events-none absolute left-0 top-full mt-1.5 w-56 rounded-lg bg-gray-900 text-white text-xs leading-relaxed p-2.5 opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-lg">
-            {fog.reason}
-          </div>
-        )}
-      </div>
-      {expanded && (
-        <div className="mt-2 text-xs text-gray-500 space-y-1.5 bg-gray-50 border border-gray-100 rounded-lg p-3">
-          <div className="flex justify-between gap-4">
-            <span>
-              Temp–dew point spread
-              <span className="block text-gray-400 text-[10px]">&lt;2° favorable, &lt;4° necessary</span>
-            </span>
-            <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
-              {fog.inputs.spreadF != null ? `${fog.inputs.spreadF.toFixed(1)}°F` : "Not available"}
-              <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(fog.spreadPoints)}</span>
-            </span>
-          </div>
-          <div className="flex justify-between gap-4 pt-1.5 border-t border-gray-100">
-            <span>
-              Relative humidity
-              <span className="block text-gray-400 text-[10px]">&gt;95% favorable, &gt;90% necessary</span>
-            </span>
-            <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
-              {fog.inputs.relativeHumidity != null ? `${Math.round(fog.inputs.relativeHumidity)}%` : "Not available"}
-              <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(fog.humidityPoints)}</span>
-            </span>
-          </div>
-          <div className="flex justify-between gap-4 pt-1.5 border-t border-gray-100">
-            <span>
-              Wind speed
-              <span className="block text-gray-400 text-[10px]">&lt;5mph favorable, &lt;10mph necessary</span>
-            </span>
-            <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
-              {fog.inputs.windSpeedMph != null ? `${Math.round(fog.inputs.windSpeedMph)} mph` : "Not available"}
-              <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(fog.windPoints)}</span>
-            </span>
-          </div>
-          <div className="flex justify-between gap-4 pt-1.5 border-t border-gray-100">
-            <span>
-              Cloud cover
-              <span className="block text-gray-400 text-[10px]">&lt;20% favorable, &lt;50% necessary</span>
-            </span>
-            <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
-              {fog.inputs.cloudCoverPercent != null ? `${Math.round(fog.inputs.cloudCoverPercent)}%` : "Not available"}
-              <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(fog.cloudPoints)}</span>
-            </span>
-          </div>
-          <div className="flex justify-between pt-2 border-t border-gray-200 font-bold text-gray-700">
-            <span>Total</span>
-            <span>{fog.points} / 8</span>
+        <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 w-72 rounded-lg bg-gray-900 text-white text-xs leading-relaxed p-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity z-20 shadow-lg">
+          <p>{fog.reason}</p>
+          <div className="mt-2 pt-2 border-t border-gray-700 space-y-1.5">
+            {rows.map((r) => (
+              <div key={r.label} className="flex justify-between gap-4">
+                <span>
+                  {r.label}
+                  <span className="block text-gray-400 text-[10px]">{r.hint}</span>
+                </span>
+                <span className="font-semibold text-right whitespace-nowrap">
+                  {r.value}
+                  <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(r.points)}</span>
+                </span>
+              </div>
+            ))}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
