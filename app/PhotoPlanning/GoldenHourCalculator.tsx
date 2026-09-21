@@ -8,8 +8,6 @@ import { getUpcomingSolarEvents } from "./lib/solarEvents";
 import { getUpcomingMoonEvents } from "./lib/moonEvents";
 import { getUpcomingCelestialEvents } from "./lib/celestialEvents";
 import { fetchOpenMeteoReadings } from "./lib/openMeteoSource";
-import { fetchHrrrReadings } from "./lib/hrrrSource";
-import { fetchAviationReadings } from "./lib/aviationSource";
 import { fetchFogAssessments, type FogAssessment, type FogLikelihood } from "./lib/fogPredictor";
 import { searchPlaces, type PlaceSuggestion } from "./lib/geocode";
 import { destinationPoint, toCompassBearing } from "./lib/geo";
@@ -274,6 +272,45 @@ function DownArrow() {
       strokeLinecap="round"
       strokeLinejoin="round"
     />
+  );
+}
+
+function ApertureIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M12 7.5 15 12l-3 4.5M9 7.5 6 12l3 4.5M7.5 9h9M7.5 15h9"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.7"
+      />
+    </svg>
+  );
+}
+
+function CalendarIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <rect x="3.5" y="5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M3.5 9.5h17M8 3v3.5M16 3v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function PinIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="9.5" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
   );
 }
 
@@ -638,30 +675,22 @@ export default function GoldenHourCalculator() {
     });
 
     setWeatherLoading(true);
-    Promise.allSettled([
-      fetchOpenMeteoReadings(lat, lng, targets),
-      fetchHrrrReadings(lat, lng, targets),
-      fetchAviationReadings(lat, lng, targets),
-      fetchFogAssessments(lat, lng, targets),
-    ]).then(([omResult, hrrrResult, avResult, fogResult]) => {
-      if (cancelled) return;
-      const openMeteo =
-        omResult.status === "fulfilled" ? omResult.value : fallbackReadings(targets.length, describeFailure(omResult));
-      const hrrr =
-        hrrrResult.status === "fulfilled" ? hrrrResult.value : fallbackReadings(targets.length, describeFailure(hrrrResult));
-      const aviation =
-        avResult.status === "fulfilled" ? avResult.value : fallbackReadings(targets.length, describeFailure(avResult));
+    // HRRR and Aviation sources are still available (see lib/hrrrSource.ts,
+    // lib/aviationSource.ts) but hidden for now -- Open-Meteo alone is
+    // considered good enough.
+    Promise.allSettled([fetchOpenMeteoReadings(lat, lng, targets), fetchFogAssessments(lat, lng, targets)]).then(
+      ([omResult, fogResult]) => {
+        if (cancelled) return;
+        const openMeteo =
+          omResult.status === "fulfilled" ? omResult.value : fallbackReadings(targets.length, describeFailure(omResult));
 
-      setEventReadings(
-        combined.map((_, i) => [
-          { source: "Open-Meteo" as SourceName, reading: openMeteo[i] },
-          { source: "HRRR (NOAA)" as SourceName, reading: hrrr[i] },
-          { source: "Aviation METAR/TAF" as SourceName, reading: aviation[i] },
-        ])
-      );
-      setFogAssessments(fogResult.status === "fulfilled" ? fogResult.value : targets.map(() => null));
-      setWeatherLoading(false);
-    });
+        setEventReadings(
+          combined.map((_, i) => [{ source: "Open-Meteo" as SourceName, reading: openMeteo[i] }])
+        );
+        setFogAssessments(fogResult.status === "fulfilled" ? fogResult.value : targets.map(() => null));
+        setWeatherLoading(false);
+      }
+    );
 
     return () => {
       cancelled = true;
@@ -672,59 +701,84 @@ export default function GoldenHourCalculator() {
 
   return (
     <div className="max-w-[1600px] w-full mx-auto">
-      <div className="sticky top-0 z-20 bg-gray-950 border-b border-gray-800 py-4 mb-8">
-        <div className="max-w-md mx-auto w-full space-y-4">
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Date</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full bg-gray-800 text-white rounded-lg px-4 py-2 border border-gray-700 focus:outline-none focus:border-amber-500"
-            />
+      {/* z-[9999]: Leaflet's tile panes use CSS transforms, which create
+          their own stacking context and can otherwise paint over a
+          low-z-index sticky ancestor despite normal DOM order. */}
+      <div className="sticky top-0 z-[9999] bg-white border-b border-gray-200 shadow-lg shadow-black/10 py-6 mb-8">
+        <div className="max-w-4xl mx-auto w-full px-4">
+          <div className="flex items-center gap-2 mb-5">
+            <ApertureIcon className="w-5 h-5 text-amber-500" />
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">
+              Plan Your Shoot
+            </span>
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm text-gray-400">Location</label>
-            <button
-              onClick={detectLocation}
-              disabled={loading}
-              className="w-full py-2 px-4 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-white transition-colors disabled:opacity-50"
-            >
-              {loading ? "Detecting…" : "Use Device Location"}
-            </button>
-
-            <p className="text-xs text-gray-500 text-center">or enter a camera location</p>
-
-            <div className="relative">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div>
+              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-2">
+                <CalendarIcon className="w-4 h-4 text-gray-400" />
+                Date
+              </label>
               <input
-                type="text"
-                placeholder="City, state, zip, or address"
-                value={locationQuery}
-                onChange={(e) => setLocationQuery(e.target.value)}
-                className="w-full bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-700 focus:outline-none focus:border-amber-500 text-sm"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full bg-gray-50 text-gray-900 rounded-lg px-4 py-2.5 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition-shadow"
               />
-              {searching && (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">…</span>
-              )}
-              {suggestions.length > 0 && (
-                <ul className="absolute z-30 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg max-h-64 overflow-y-auto shadow-xl">
-                  {suggestions.map((s, i) => (
-                    <li key={i}>
-                      <button
-                        onClick={() => selectSuggestion(s)}
-                        className="w-full text-left px-3 py-2 hover:bg-gray-700 text-sm text-gray-200"
-                      >
-                        {s.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
 
-            {geoError && <p className="text-red-400 text-sm">{geoError}</p>}
-            {cityState && <p className="text-gray-500 text-xs">Location: {cityState}</p>}
+            <div>
+              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-2">
+                <PinIcon className="w-4 h-4 text-gray-400" />
+                Location
+              </label>
+              <div className="space-y-2">
+                <button
+                  onClick={detectLocation}
+                  disabled={loading}
+                  className="w-full py-2.5 px-4 bg-gray-900 hover:bg-gray-800 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {loading ? "Detecting…" : "Use Device Location"}
+                </button>
+
+                <p className="text-xs text-gray-400 text-center">or enter a camera location</p>
+
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="City, state, zip, or address"
+                    value={locationQuery}
+                    onChange={(e) => setLocationQuery(e.target.value)}
+                    className="w-full bg-gray-50 text-gray-900 rounded-lg px-3 py-2.5 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-sm transition-shadow"
+                  />
+                  {searching && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">…</span>
+                  )}
+                  {suggestions.length > 0 && (
+                    <ul className="absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-lg max-h-64 overflow-y-auto shadow-xl">
+                      {suggestions.map((s, i) => (
+                        <li key={i}>
+                          <button
+                            onClick={() => selectSuggestion(s)}
+                            className="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm text-gray-700"
+                          >
+                            {s.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {geoError && <p className="text-red-600 text-sm">{geoError}</p>}
+                {cityState && (
+                  <p className="text-gray-500 text-xs flex items-center gap-1">
+                    <PinIcon className="w-3 h-3 text-amber-500" />
+                    {cityState}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
