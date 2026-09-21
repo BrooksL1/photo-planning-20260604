@@ -9,6 +9,7 @@ import { getUpcomingCelestialEvents } from "./lib/celestialEvents";
 import { fetchOpenMeteoReadings } from "./lib/openMeteoSource";
 import { fetchNwsReadings } from "./lib/nwsSource";
 import { fetchAviationReadings } from "./lib/aviationSource";
+import { fetchFogAssessments, type FogAssessment, type FogLikelihood } from "./lib/fogPredictor";
 
 type SunTimes = {
   goldenHourMorningStart: Date;
@@ -114,7 +115,79 @@ function TimeRow({ label, value, color, note }: TimeRowProps) {
   );
 }
 
-function WeatherAuditTable({ items }: { items: SolarEventWithReadings[] }) {
+const FOG_BADGE_COLORS: Record<FogLikelihood, string> = {
+  "Highly Favorable": "bg-sky-900/60 text-sky-200 border-sky-700",
+  Possible: "bg-amber-900/50 text-amber-200 border-amber-700",
+  Unlikely: "bg-gray-800 text-gray-400 border-gray-700",
+};
+
+function FogBadge({ fog }: { fog: FogAssessment | null }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!fog) {
+    return <span className="text-xs text-gray-600">Fog: Not available</span>;
+  }
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className={`text-xs px-2 py-1 rounded-full border transition-colors ${FOG_BADGE_COLORS[fog.likelihood]}`}
+      >
+        Fog: {fog.likelihood} {expanded ? "▾" : "▸"}
+      </button>
+      {expanded && (
+        <div className="mt-2 text-xs text-gray-400 space-y-2 bg-gray-950/60 rounded-lg p-3">
+          <div className="flex justify-between gap-4">
+            <span>
+              Temp–dew point spread
+              <span className="block text-gray-600">&lt;2° highly favorable, &lt;4° necessary</span>
+            </span>
+            <span className="font-mono text-gray-200 text-right whitespace-nowrap">
+              {fog.inputs.spreadF != null ? `${fog.inputs.spreadF.toFixed(1)}°F` : "Not available"}
+              <br />
+              {fog.spreadPoints} pt
+            </span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span>
+              Relative humidity
+              <span className="block text-gray-600">&gt;95% highly favorable, &gt;90% necessary</span>
+            </span>
+            <span className="font-mono text-gray-200 text-right whitespace-nowrap">
+              {fog.inputs.relativeHumidity != null ? `${Math.round(fog.inputs.relativeHumidity)}%` : "Not available"}
+              <br />
+              {fog.humidityPoints} pt
+            </span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span>
+              Wind speed
+              <span className="block text-gray-600">&lt;5mph highly favorable, &lt;10mph necessary</span>
+            </span>
+            <span className="font-mono text-gray-200 text-right whitespace-nowrap">
+              {fog.inputs.windSpeedMph != null ? `${Math.round(fog.inputs.windSpeedMph)} mph` : "Not available"}
+              <br />
+              {fog.windPoints} pt
+            </span>
+          </div>
+          <div className="flex justify-between pt-2 border-t border-gray-800 font-medium text-gray-300">
+            <span>Total</span>
+            <span className="font-mono">{fog.points} / 6</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WeatherAuditTable({
+  items,
+  fogs,
+}: {
+  items: SolarEventWithReadings[];
+  fogs: (FogAssessment | null)[];
+}) {
   return (
     <div className="space-y-4">
       {items.map(({ event, readings }, i) => (
@@ -132,6 +205,7 @@ function WeatherAuditTable({ items }: { items: SolarEventWithReadings[] }) {
                 </span>
               ))}
             </div>
+            <FogBadge fog={fogs[i] ?? null} />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-separate border-spacing-0 min-w-[560px]">
@@ -276,6 +350,7 @@ export default function GoldenHourCalculator() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [moonEvents, setMoonEvents] = useState<MoonEvent[]>([]);
   const [celestialEvents, setCelestialEvents] = useState<CelestialEvent[]>([]);
+  const [fogAssessments, setFogAssessments] = useState<(FogAssessment | null)[]>([]);
 
   function detectLocation() {
     if (!navigator.geolocation) {
@@ -347,7 +422,8 @@ export default function GoldenHourCalculator() {
       fetchOpenMeteoReadings(lat, lng, targets),
       fetchNwsReadings(lat, lng, targets),
       fetchAviationReadings(lat, lng, targets),
-    ]).then(([omResult, nwsResult, avResult]) => {
+      fetchFogAssessments(lat, lng, targets),
+    ]).then(([omResult, nwsResult, avResult, fogResult]) => {
       if (cancelled) return;
       const openMeteo =
         omResult.status === "fulfilled" ? omResult.value : fallbackReadings(targets.length, describeFailure(omResult));
@@ -366,6 +442,7 @@ export default function GoldenHourCalculator() {
           ],
         }))
       );
+      setFogAssessments(fogResult.status === "fulfilled" ? fogResult.value : targets.map(() => null));
       setWeatherLoading(false);
     });
 
@@ -501,7 +578,7 @@ export default function GoldenHourCalculator() {
             source doesn&apos;t provide that data point -- never guessed.
           </p>
           {weatherLoading && <p className="text-gray-600 text-sm">Loading forecasts from 3 sources…</p>}
-          <WeatherAuditTable items={solarEventReadings} />
+          <WeatherAuditTable items={solarEventReadings} fogs={fogAssessments} />
         </div>
       )}
 
