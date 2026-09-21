@@ -51,26 +51,42 @@ const POTENTIAL_BADGE_COLORS: Record<PotentialLabel, string> = {
 
 // Cloud cover toward the event (tip) plus precip chance at the pin, folded
 // into one quick-glance label. Evaluated in order -- first match wins.
+// Visibility at the pin is applied last as a ceiling: haze/murk can flatten
+// an otherwise-great sky even when cloud layers look ideal.
 function computePotential(pointWeather: PointWeatherPair | null, fog: FogAssessment | null): PotentialLabel | null {
   if (!pointWeather) return null;
   const { cloudLow, cloudMid, cloudHigh } = pointWeather.tip;
   const precipAtPin = pointWeather.pin.precipProbability;
   if (cloudLow == null || cloudMid == null || cloudHigh == null || precipAtPin == null) return null;
 
+  let tier: PotentialLabel;
   const totalCloud = cloudLow + cloudMid + cloudHigh;
   if (totalCloud > 80 || cloudLow > 40 || precipAtPin > 80) {
-    return "Low Potential";
+    tier = "Low Potential";
+  } else if (cloudLow > 20 || precipAtPin > 40) {
+    tier = "Some Potential";
+  } else {
+    const clearLow = cloudLow >= 0 && cloudLow <= 20;
+    const midInRange = cloudMid >= 20 && cloudMid <= 80;
+    const highInRange = cloudHigh >= 20 && cloudHigh <= 80;
+    if (clearLow && midInRange && highInRange) {
+      tier = fog?.likelihood === "Highly Favorable" ? "Very Promising!" : "High Potential";
+    } else {
+      tier = "Some Potential";
+    }
   }
-  if (cloudLow > 20 || precipAtPin > 40) {
-    return "Some Potential";
+
+  const visibilityMiles = pointWeather.pin.visibilityMiles;
+  if (visibilityMiles != null) {
+    if (visibilityMiles < 5) {
+      // Heavy haze/murk washes out color and contrast regardless of cloud shape.
+      tier = "Low Potential";
+    } else if (visibilityMiles < 8 && (tier === "High Potential" || tier === "Very Promising!")) {
+      tier = "Some Potential";
+    }
   }
-  const clearLow = cloudLow >= 0 && cloudLow <= 20;
-  const midInRange = cloudMid >= 20 && cloudMid <= 80;
-  const highInRange = cloudHigh >= 20 && cloudHigh <= 80;
-  if (clearLow && midInRange && highInRange) {
-    return fog?.likelihood === "Highly Favorable" ? "Very Promising!" : "High Potential";
-  }
-  return "Some Potential";
+
+  return tier;
 }
 
 function fmt(date: Date): string {
@@ -240,9 +256,19 @@ function FogBadge({ fog }: { fog: FogAssessment | null }) {
               <span className="block text-gray-400 font-medium text-[10px]">{fog.windPoints} pt</span>
             </span>
           </div>
+          <div className="flex justify-between gap-4 pt-1.5 border-t border-gray-100">
+            <span>
+              Cloud cover
+              <span className="block text-gray-400 text-[10px]">&lt;20% favorable, &lt;50% necessary</span>
+            </span>
+            <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
+              {fog.inputs.cloudCoverPercent != null ? `${Math.round(fog.inputs.cloudCoverPercent)}%` : "Not available"}
+              <span className="block text-gray-400 font-medium text-[10px]">{fog.cloudPoints} pt</span>
+            </span>
+          </div>
           <div className="flex justify-between pt-2 border-t border-gray-200 font-bold text-gray-700">
             <span>Total</span>
-            <span>{fog.points} / 6</span>
+            <span>{fog.points} / 8</span>
           </div>
         </div>
       )}
@@ -451,23 +477,13 @@ function EventTile({
         )}
       </div>
       {event.timePoints && (
-        <div className="my-2">
-          <div className={`${SERIF} text-lg font-bold text-gray-900 tracking-tight flex flex-wrap items-baseline gap-x-1.5`}>
-            {event.timePoints.map((t, i) => (
-              <span key={i} className="flex items-baseline gap-x-1.5">
-                {i > 0 && <span className="text-indigo-300 font-normal text-base">→</span>}
-                {fmt(t.date)}
-              </span>
-            ))}
-          </div>
-          <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-x-1">
-            {event.timePoints.map((t, i) => (
-              <span key={i}>
-                {i > 0 && <span className="mx-0.5">→</span>}
-                {t.label}
-              </span>
-            ))}
-          </div>
+        <div className={`my-2 grid ${event.timePoints.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+          {event.timePoints.map((t, i) => (
+            <div key={i} className="text-center px-1">
+              <div className={`${SERIF} text-lg font-bold text-gray-900 tracking-tight`}>{fmt(t.date)}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{t.label}</div>
+            </div>
+          ))}
         </div>
       )}
       {event.detail && (

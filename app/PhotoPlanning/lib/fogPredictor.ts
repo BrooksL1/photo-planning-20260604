@@ -9,6 +9,7 @@ export type FogInputs = {
   spreadF: number | null;
   relativeHumidity: number | null;
   windSpeedMph: number | null;
+  cloudCoverPercent: number | null;
 };
 
 export type FogLikelihood = "Unlikely" | "Possible" | "Highly Favorable";
@@ -19,6 +20,7 @@ export type FogAssessment = {
   spreadPoints: number;
   humidityPoints: number;
   windPoints: number;
+  cloudPoints: number;
   inputs: FogInputs;
 };
 
@@ -26,7 +28,7 @@ async function fetchFogInputs(lat: number, lng: number, targets: Date[]): Promis
   const url =
     "https://api.open-meteo.com/v1/forecast" +
     `?latitude=${lat}&longitude=${lng}` +
-    "&hourly=temperature_2m,dew_point_2m,relative_humidity_2m,wind_speed_10m" +
+    "&hourly=temperature_2m,dew_point_2m,relative_humidity_2m,wind_speed_10m,cloud_cover" +
     "&temperature_unit=fahrenheit&wind_speed_unit=mph" +
     "&forecast_days=3&timezone=auto";
 
@@ -41,6 +43,7 @@ async function fetchFogInputs(lat: number, lng: number, targets: Date[]): Promis
   const dewPoint: number[] = data.hourly.dew_point_2m;
   const humidity: number[] = data.hourly.relative_humidity_2m;
   const wind: number[] = data.hourly.wind_speed_10m;
+  const cloudCover: number[] = data.hourly.cloud_cover;
 
   function nearestIndex(target: Date): number {
     let bestIdx = 0;
@@ -65,6 +68,7 @@ async function fetchFogInputs(lat: number, lng: number, targets: Date[]): Promis
       spreadF: t != null && dp != null ? t - dp : null,
       relativeHumidity: humidity[idx] ?? null,
       windSpeedMph: wind[idx] ?? null,
+      cloudCoverPercent: cloudCover[idx] ?? null,
     };
   });
 }
@@ -92,13 +96,23 @@ function scoreWind(windMph: number | null): number {
   return 0;
 }
 
+// Radiation fog forms under clear skies -- clouds trap heat and prevent the
+// ground-level cooling that drives fog, so low cloud cover scores highest.
+function scoreCloud(cloudCoverPercent: number | null): number {
+  if (cloudCoverPercent == null) return 0;
+  if (cloudCoverPercent < 20) return 2;
+  if (cloudCoverPercent < 50) return 1;
+  return 0;
+}
+
 function assess(inputs: FogInputs): FogAssessment {
   const spreadPoints = scoreSpread(inputs.spreadF);
   const humidityPoints = scoreHumidity(inputs.relativeHumidity);
   const windPoints = scoreWind(inputs.windSpeedMph);
-  const points = spreadPoints + humidityPoints + windPoints;
-  const likelihood: FogLikelihood = points >= 5 ? "Highly Favorable" : points === 4 ? "Possible" : "Unlikely";
-  return { likelihood, points, spreadPoints, humidityPoints, windPoints, inputs };
+  const cloudPoints = scoreCloud(inputs.cloudCoverPercent);
+  const points = spreadPoints + humidityPoints + windPoints + cloudPoints;
+  const likelihood: FogLikelihood = points >= 7 ? "Highly Favorable" : points >= 5 ? "Possible" : "Unlikely";
+  return { likelihood, points, spreadPoints, humidityPoints, windPoints, cloudPoints, inputs };
 }
 
 export async function fetchFogAssessments(
