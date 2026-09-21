@@ -31,9 +31,9 @@ export function getUpcomingSolarEvents(lat: number, lng: number, now: Date = new
         kind: "Sunrise",
         at: t.sunrise,
         boundaryTimes: [
-          { label: "Blue Hour Begins (-6°)", date: t.dawn },
+          { label: "Begin Blue Hour (-6°)", date: t.dawn },
           { label: "Sunrise", date: t.sunrise },
-          { label: "Golden Hour Ends (+6°)", date: t.goldenHourEnd },
+          { label: "End Golden Hour (+6°)", date: t.goldenHourEnd },
         ],
       });
     }
@@ -43,9 +43,9 @@ export function getUpcomingSolarEvents(lat: number, lng: number, now: Date = new
         kind: "Sunset",
         at: t.sunset,
         boundaryTimes: [
-          { label: "Golden Hour Begins (+6°)", date: t.goldenHour },
+          { label: "Begin Golden Hour (+6°)", date: t.goldenHour },
           { label: "Sunset", date: t.sunset },
-          { label: "Blue Hour Ends (-6°)", date: t.dusk },
+          { label: "End Blue Hour (-6°)", date: t.dusk },
         ],
       });
     }

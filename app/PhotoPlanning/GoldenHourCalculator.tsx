@@ -27,7 +27,12 @@ type UnifiedEvent = {
   kind: UnifiedEventKind;
   primaryTime: Date;
   headerLabel: string;
-  detailLine: string;
+  // 2-3 chronological time points for the tile's window (e.g. Begin Blue
+  // Hour -> Sunrise -> End Golden Hour). Rendered as two rows: bold times,
+  // smaller labels below. Sun/moon events only.
+  timePoints?: { label: string; date: Date }[];
+  // Plain-text description for events with no time window (celestial).
+  detail?: string;
   moonIlluminationPercent?: number;
   celestialLink?: { url: string; label: string };
   bearingDeg?: number;
@@ -91,7 +96,7 @@ function buildUnifiedEvents(
       kind: e.kind,
       primaryTime: e.at,
       headerLabel: `${e.kind} · ${fmt(e.at)}`,
-      detailLine: e.boundaryTimes.map((b) => `${b.label} ${fmt(b.date)}`).join(" · "),
+      timePoints: e.boundaryTimes,
       bearingDeg,
     });
   });
@@ -106,7 +111,7 @@ function buildUnifiedEvents(
       kind: e.kind,
       primaryTime,
       headerLabel: `${e.kind} · ${fmt(primaryTime)}`,
-      detailLine: e.times.map((t) => `${t.label} ${fmt(t.date)}`).join(" · "),
+      timePoints: e.times,
       moonIlluminationPercent: illumination,
       bearingDeg,
     });
@@ -119,7 +124,7 @@ function buildUnifiedEvents(
       kind: e.category === "Eclipse" ? "Eclipse" : "Meteor Shower",
       primaryTime: e.date,
       headerLabel: `${e.title} · ${fmt(e.date)}`,
-      detailLine: e.detail,
+      detail: e.detail,
       celestialLink: { url: e.sourceUrl, label: "Verify source" },
     });
   });
@@ -402,7 +407,29 @@ function EventTile({
           <span className="text-xs text-gray-400 font-medium">{event.moonIlluminationPercent}% illum.</span>
         )}
       </div>
-      <div className="text-[12.5px] text-gray-500 leading-relaxed my-1.5">{event.detailLine}</div>
+      {event.timePoints && (
+        <div className="my-2">
+          <div className="text-lg font-bold text-gray-900 tracking-tight flex flex-wrap items-baseline gap-x-1.5">
+            {event.timePoints.map((t, i) => (
+              <span key={i} className="flex items-baseline gap-x-1.5">
+                {i > 0 && <span className="text-indigo-300 font-normal text-base">→</span>}
+                {fmt(t.date)}
+              </span>
+            ))}
+          </div>
+          <div className="text-[11px] text-gray-400 mt-0.5 flex flex-wrap gap-x-1">
+            {event.timePoints.map((t, i) => (
+              <span key={i}>
+                {i > 0 && <span className="mx-0.5">→</span>}
+                {t.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {event.detail && (
+        <div className="text-[12.5px] text-gray-500 leading-relaxed my-1.5">{event.detail}</div>
+      )}
       {event.celestialLink && (
         <a
           href={event.celestialLink.url}
@@ -473,6 +500,7 @@ function DayRow({
   pinLat,
   pinLng,
   onPinMove,
+  showDivider,
 }: {
   label: string;
   items: IndexedEvent[];
@@ -481,6 +509,7 @@ function DayRow({
   pinLat: number;
   pinLng: number;
   onPinMove: (lat: number, lng: number) => void;
+  showDivider: boolean;
 }) {
   const useSlider = items.length > 3;
 
@@ -497,7 +526,7 @@ function DayRow({
   );
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${showDivider ? "pt-8 border-t border-gray-200" : ""}`}>
       <h3 className={`${SERIF} text-[21px] font-semibold text-gray-900 flex items-baseline gap-3`}>
         {label}
         <span className="flex-1 h-px bg-gray-200" />
@@ -768,9 +797,9 @@ export default function GoldenHourCalculator() {
       )}
 
       {lat !== null && lng !== null && (
-        <div className="space-y-8">
-          {weatherLoading && <p className="text-gray-400 text-sm">Loading forecasts…</p>}
-          {days.map((day) => (
+        <div className="space-y-0">
+          {weatherLoading && <p className="text-gray-400 text-sm mb-8">Loading forecasts…</p>}
+          {days.map((day, i) => (
             <DayRow
               key={day.key}
               label={day.label}
@@ -780,6 +809,7 @@ export default function GoldenHourCalculator() {
               pinLat={lat}
               pinLng={lng}
               onPinMove={movePin}
+              showDivider={i > 0}
             />
           ))}
           {cometNote && (
