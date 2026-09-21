@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import SunCalc from "suncalc";
 import type { SolarEvent, MoonEvent, CelestialEvent, SourceReading, SourceName } from "./lib/types";
 import { getUpcomingSolarEvents } from "./lib/solarEvents";
@@ -11,6 +12,14 @@ import { fetchHrrrReadings } from "./lib/hrrrSource";
 import { fetchAviationReadings } from "./lib/aviationSource";
 import { fetchFogAssessments, type FogAssessment, type FogLikelihood } from "./lib/fogPredictor";
 import { searchPlaces, type PlaceSuggestion } from "./lib/geocode";
+import { destinationPoint, toCompassBearing } from "./lib/geo";
+import { fetchPointWeather, type PointReading } from "./lib/pointWeather";
+
+// Leaflet touches `window` at import time -- must load client-only.
+const EventMap = dynamic(() => import("./EventMap"), {
+  ssr: false,
+  loading: () => <div className="h-[220px] bg-gray-800 rounded-lg animate-pulse" />,
+});
 
 type EventReading = { source: SourceName; reading: SourceReading };
 
@@ -24,7 +33,13 @@ type UnifiedEvent = {
   detailLine: string;
   moonIlluminationPercent?: number;
   celestialLink?: { url: string; label: string };
+  // Compass bearing (degrees from north) toward the sun/moon at primaryTime
+  // -- only defined for Sunrise/Sunset/Moonrise/Moonset, which have a
+  // well-defined direction. Drives the map's arrow.
+  bearingDeg?: number;
 };
+
+type PointWeatherPair = { pin: PointReading; tip: PointReading };
 
 function fmt(date: Date): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -87,6 +102,8 @@ async function fetchCityState(lat: number, lng: number): Promise<string | null> 
 // specific date/time -- see the standing disclaimer rendered separately).
 // Moon events under 1% illumination are dropped (not meaningfully visible).
 function buildUnifiedEvents(
+  lat: number,
+  lng: number,
   solarEvents: SolarEvent[],
   moonEvents: MoonEvent[],
   celestialEvents: CelestialEvent[]
@@ -94,12 +111,14 @@ function buildUnifiedEvents(
   const events: UnifiedEvent[] = [];
 
   solarEvents.forEach((e, i) => {
+    const bearingDeg = toCompassBearing(SunCalc.getPosition(e.at, lat, lng).azimuth);
     events.push({
       id: `solar-${i}`,
       kind: e.kind,
       primaryTime: e.at,
       headerLabel: `${e.kind} – ${fmt(e.at)}`,
       detailLine: e.boundaryTimes.map((b) => `${b.label} ${fmt(b.date)}`).join(" · "),
+      bearingDeg,
     });
   });
 
@@ -107,6 +126,7 @@ function buildUnifiedEvents(
     const primaryTime = e.kind === "Moonrise" ? e.times[0].date : e.times[1].date;
     const illumination = Math.round(SunCalc.getMoonIllumination(primaryTime).fraction * 100);
     if (illumination <= 1) return;
+    const bearingDeg = toCompassBearing(SunCalc.getMoonPosition(primaryTime, lat, lng).azimuth);
     events.push({
       id: `moon-${i}`,
       kind: e.kind,
@@ -114,6 +134,7 @@ function buildUnifiedEvents(
       headerLabel: `${e.kind} – ${fmt(primaryTime)}`,
       detailLine: e.times.map((t) => `${t.label} ${fmt(t.date)}`).join(" · "),
       moonIlluminationPercent: illumination,
+      bearingDeg,
     });
   });
 
@@ -308,10 +329,18 @@ function EventTile({
   event,
   readings,
   fog,
+  pinLat,
+  pinLng,
+  pointWeather,
+  onPinMove,
 }: {
   event: UnifiedEvent;
   readings: EventReading[];
   fog: FogAssessment | null;
+  pinLat: number;
+  pinLng: number;
+  pointWeather: PointWeatherPair | null;
+  onPinMove: (lat: number, lng: number) => void;
 }) {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden h-full">
@@ -336,6 +365,26 @@ function EventTile({
         )}
         {readings.length > 0 && <FogBadge fog={fog} />}
       </div>
+      {event.bearingDeg != null && (
+        <div className="border-t border-gray-800">
+          <EventMap pinLat={pinLat} pinLng={pinLng} bearingDeg={event.bearingDeg} onPinMove={onPinMove} />
+          <div className="px-4 py-2 text-xs text-gray-400 space-y-0.5 bg-gray-950/40">
+            <div>
+              <span className="text-gray-500">At your location:</span>{" "}
+              {pointWeather
+                ? `${pointWeather.pin.tempF != null ? Math.round(pointWeather.pin.tempF) + "°F" : "Not available"} · ${fmtPercent(pointWeather.pin.precipProbability)} precip · ${fmtMiles(pointWeather.pin.visibilityMiles)} visibility`
+                : "Loading…"}
+            </div>
+            <div>
+              <span className="text-gray-500">Toward the event (20mi):</span>{" "}
+              {pointWeather
+                ? `Low ${fmtPercent(pointWeather.tip.cloudLow)} / Mid ${fmtPercent(pointWeather.tip.cloudMid)} / High ${fmtPercent(pointWeather.tip.cloudHigh)}`
+                : "Loading…"}
+            </div>
+            <div className="text-gray-600">Drag the pin to change location.</div>
+          </div>
+        </div>
+      )}
       {readings.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-separate border-spacing-0 min-w-[520px]">
@@ -401,35 +450,49 @@ function DayRow({
   items,
   eventReadings,
   fogAssessments,
+  pointWeatherByEvent,
+  pinLat,
+  pinLng,
+  onPinMove,
 }: {
   label: string;
   items: IndexedEvent[];
   eventReadings: EventReading[][];
   fogAssessments: (FogAssessment | null)[];
+  pointWeatherByEvent: (PointWeatherPair | null)[];
+  pinLat: number;
+  pinLng: number;
+  onPinMove: (lat: number, lng: number) => void;
 }) {
   const useSlider = items.length > 3;
+
+  const tile = ({ event, index }: IndexedEvent) => (
+    <EventTile
+      key={event.id}
+      event={event}
+      readings={eventReadings[index] ?? []}
+      fog={fogAssessments[index] ?? null}
+      pinLat={pinLat}
+      pinLng={pinLng}
+      pointWeather={pointWeatherByEvent[index] ?? null}
+      onPinMove={onPinMove}
+    />
+  );
 
   return (
     <div className="space-y-3">
       <h3 className="text-white font-semibold text-lg">{label}</h3>
       {useSlider ? (
         <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2">
-          {items.map(({ event, index }) => (
-            <div key={event.id} className="flex-none w-[min(90vw,420px)] xl:w-[calc(33.333%-1rem)] snap-start">
-              <EventTile event={event} readings={eventReadings[index] ?? []} fog={fogAssessments[index] ?? null} />
+          {items.map((item) => (
+            <div key={item.event.id} className="flex-none w-[min(90vw,420px)] xl:w-[calc(33.333%-1rem)] snap-start">
+              {tile(item)}
             </div>
           ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-stretch">
-          {items.map(({ event, index }) => (
-            <EventTile
-              key={event.id}
-              event={event}
-              readings={eventReadings[index] ?? []}
-              fog={fogAssessments[index] ?? null}
-            />
-          ))}
+          {items.map((item) => tile(item))}
         </div>
       )}
     </div>
@@ -451,8 +514,14 @@ export default function GoldenHourCalculator() {
   const [unifiedEvents, setUnifiedEvents] = useState<UnifiedEvent[]>([]);
   const [eventReadings, setEventReadings] = useState<EventReading[][]>([]);
   const [fogAssessments, setFogAssessments] = useState<(FogAssessment | null)[]>([]);
+  const [pointWeatherByEvent, setPointWeatherByEvent] = useState<(PointWeatherPair | null)[]>([]);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [cometNote, setCometNote] = useState<CelestialEvent | null>(null);
+
+  function movePin(newLat: number, newLng: number) {
+    setLat(newLat);
+    setLng(newLng);
+  }
 
   function detectLocation() {
     if (!navigator.geolocation) {
@@ -539,13 +608,34 @@ export default function GoldenHourCalculator() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- pure computation, no fetch involved
     setCometNote(celestial.find((e) => e.category === "Comet") ?? null);
 
-    const combined = buildUnifiedEvents(solar, moon, celestial);
+    const combined = buildUnifiedEvents(lat, lng, solar, moon, celestial);
     setUnifiedEvents(combined);
     setEventReadings(combined.map(() => []));
     setFogAssessments(combined.map(() => null));
+    setPointWeatherByEvent(combined.map(() => null));
 
     if (combined.length === 0) return;
     const targets = combined.map((e) => e.primaryTime);
+
+    const mapEvents = combined
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => e.bearingDeg != null);
+    Promise.allSettled(
+      mapEvents.map(({ e }) => {
+        const tip = destinationPoint(lat, lng, e.bearingDeg!, 20);
+        return Promise.all([fetchPointWeather(lat, lng, e.primaryTime), fetchPointWeather(tip.lat, tip.lng, e.primaryTime)]);
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const next: (PointWeatherPair | null)[] = combined.map(() => null);
+      results.forEach((r, idx) => {
+        if (r.status === "fulfilled") {
+          const [pin, tip] = r.value;
+          next[mapEvents[idx].i] = { pin, tip };
+        }
+      });
+      setPointWeatherByEvent(next);
+    });
 
     setWeatherLoading(true);
     Promise.allSettled([
@@ -663,6 +753,10 @@ export default function GoldenHourCalculator() {
               items={day.items}
               eventReadings={eventReadings}
               fogAssessments={fogAssessments}
+              pointWeatherByEvent={pointWeatherByEvent}
+              pinLat={lat}
+              pinLng={lng}
+              onPinMove={movePin}
             />
           ))}
           {cometNote && (
