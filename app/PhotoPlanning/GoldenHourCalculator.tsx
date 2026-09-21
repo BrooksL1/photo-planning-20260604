@@ -49,30 +49,51 @@ const POTENTIAL_BADGE_COLORS: Record<PotentialLabel, string> = {
   "Very Promising!": "bg-indigo-600 text-white",
 };
 
+type PotentialResult = { label: PotentialLabel; reason: string };
+
 // Cloud cover toward the event (tip) plus precip chance at the pin, folded
 // into one quick-glance label. Evaluated in order -- first match wins.
 // Visibility at the pin is applied last as a ceiling: haze/murk can flatten
 // an otherwise-great sky even when cloud layers look ideal.
-function computePotential(pointWeather: PointWeatherPair | null, fog: FogAssessment | null): PotentialLabel | null {
+function computePotential(pointWeather: PointWeatherPair | null, fog: FogAssessment | null): PotentialResult | null {
   if (!pointWeather) return null;
   const { cloudLow, cloudMid, cloudHigh } = pointWeather.tip;
   const precipAtPin = pointWeather.pin.precipProbability;
   if (cloudLow == null || cloudMid == null || cloudHigh == null || precipAtPin == null) return null;
 
   let tier: PotentialLabel;
+  let reason: string;
   const totalCloud = cloudLow + cloudMid + cloudHigh;
   if (totalCloud > 80 || cloudLow > 40 || precipAtPin > 80) {
     tier = "Low Potential";
+    if (precipAtPin > 80) {
+      reason = `Poor: a ${Math.round(precipAtPin)}% chance of precipitation makes clear skies unlikely.`;
+    } else if (cloudLow > 40) {
+      reason = `Poor: low clouds cover ${Math.round(cloudLow)}% toward the event, likely blocking the horizon.`;
+    } else {
+      reason = `Poor: the sky is ${Math.round(totalCloud)}% covered toward the event, leaving little room for color.`;
+    }
   } else if (cloudLow > 20 || precipAtPin > 40) {
     tier = "Some Potential";
+    reason =
+      cloudLow > 20
+        ? `Middling: low clouds cover ${Math.round(cloudLow)}% toward the event, enough to partly obscure the horizon.`
+        : `Middling: a ${Math.round(precipAtPin)}% chance of precipitation adds real uncertainty.`;
   } else {
     const clearLow = cloudLow >= 0 && cloudLow <= 20;
     const midInRange = cloudMid >= 20 && cloudMid <= 80;
     const highInRange = cloudHigh >= 20 && cloudHigh <= 80;
     if (clearLow && midInRange && highInRange) {
-      tier = fog?.likelihood === "Highly Favorable" ? "Very Promising!" : "High Potential";
+      if (fog?.likelihood === "Highly Favorable") {
+        tier = "Very Promising!";
+        reason = `Optimal: clear horizon with well-layered mid/high clouds to catch color, plus favorable fog for extra atmosphere.`;
+      } else {
+        tier = "High Potential";
+        reason = `Optimal: clear horizon (${Math.round(cloudLow)}% low cloud) with well-layered mid/high clouds (${Math.round(cloudMid)}%/${Math.round(cloudHigh)}%) to catch color.`;
+      }
     } else {
       tier = "Some Potential";
+      reason = `Middling: cloud layering is mixed -- not quite the clear-low, textured-high combination that makes for the best light.`;
     }
   }
 
@@ -81,12 +102,14 @@ function computePotential(pointWeather: PointWeatherPair | null, fog: FogAssessm
     if (visibilityMiles < 5) {
       // Heavy haze/murk washes out color and contrast regardless of cloud shape.
       tier = "Low Potential";
+      reason = `Poor: visibility is only ${visibilityMiles.toFixed(1)}mi, so haze or murk will likely wash out color and contrast.`;
     } else if (visibilityMiles < 8 && (tier === "High Potential" || tier === "Very Promising!")) {
       tier = "Some Potential";
+      reason = `Middling: cloud layering looks great, but ${visibilityMiles.toFixed(1)}mi visibility means haze may flatten the color.`;
     }
   }
 
-  return tier;
+  return { label: tier, reason };
 }
 
 function fmt(date: Date): string {
@@ -461,19 +484,26 @@ function EventTile({
   return (
     <div className="border-t-[3px] border-indigo-500 pt-4 h-full flex flex-col">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <EventIcon kind={event.kind} />
-          <div className={`${SERIF} text-lg font-semibold text-gray-900`}>{event.headerLabel}</div>
+          <div className={`${SERIF} text-lg font-semibold text-gray-900 truncate`}>{event.headerLabel}</div>
           {event.moonIlluminationPercent != null && (
-            <span className="text-xs text-gray-400 font-medium">{event.moonIlluminationPercent}% illum.</span>
+            <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
+              {event.moonIlluminationPercent}% illum.
+            </span>
           )}
         </div>
         {potential && (
-          <span
-            className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${POTENTIAL_BADGE_COLORS[potential]}`}
-          >
-            {potential}
-          </span>
+          <div className="relative shrink-0 group">
+            <span
+              className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap cursor-default ${POTENTIAL_BADGE_COLORS[potential.label]}`}
+            >
+              {potential.label}
+            </span>
+            <div className="pointer-events-none absolute right-0 top-full mt-1.5 w-56 rounded-lg bg-gray-900 text-white text-xs leading-relaxed p-2.5 opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-lg">
+              {potential.reason}
+            </div>
+          </div>
         )}
       </div>
       {event.timePoints && (
