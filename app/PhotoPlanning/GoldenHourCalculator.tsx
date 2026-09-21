@@ -40,6 +40,39 @@ type UnifiedEvent = {
 
 type PointWeatherPair = { pin: PointReading; tip: PointReading };
 
+type PotentialLabel = "Low Potential" | "Some Potential" | "High Potential" | "Very Promising!";
+
+const POTENTIAL_BADGE_COLORS: Record<PotentialLabel, string> = {
+  "Low Potential": "bg-gray-100 text-gray-500",
+  "Some Potential": "bg-amber-50 text-amber-700",
+  "High Potential": "bg-emerald-50 text-emerald-700",
+  "Very Promising!": "bg-indigo-600 text-white",
+};
+
+// Cloud cover toward the event (tip) plus precip chance at the pin, folded
+// into one quick-glance label. Evaluated in order -- first match wins.
+function computePotential(pointWeather: PointWeatherPair | null, fog: FogAssessment | null): PotentialLabel | null {
+  if (!pointWeather) return null;
+  const { cloudLow, cloudMid, cloudHigh } = pointWeather.tip;
+  const precipAtPin = pointWeather.pin.precipProbability;
+  if (cloudLow == null || cloudMid == null || cloudHigh == null || precipAtPin == null) return null;
+
+  const totalCloud = cloudLow + cloudMid + cloudHigh;
+  if (totalCloud > 80 || cloudLow > 40 || precipAtPin > 80) {
+    return "Low Potential";
+  }
+  if (cloudLow > 20 || precipAtPin > 40) {
+    return "Some Potential";
+  }
+  const clearLow = cloudLow >= 0 && cloudLow <= 20;
+  const midInRange = cloudMid >= 20 && cloudMid <= 80;
+  const highInRange = cloudHigh >= 20 && cloudHigh <= 80;
+  if (clearLow && midInRange && highInRange) {
+    return fog?.likelihood === "Highly Favorable" ? "Very Promising!" : "High Potential";
+  }
+  return "Some Potential";
+}
+
 function fmt(date: Date): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
@@ -171,40 +204,40 @@ function FogBadge({ fog }: { fog: FogAssessment | null }) {
     <div className="mb-3">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className={`text-[11px] font-semibold px-3 py-1 rounded-full transition-colors ${FOG_BADGE_COLORS[fog.likelihood]}`}
+        className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${FOG_BADGE_COLORS[fog.likelihood]}`}
       >
         Fog · {fog.likelihood} {expanded ? "▾" : "▸"}
       </button>
       {expanded && (
-        <div className="mt-2 text-[11.5px] text-gray-500 space-y-1.5 bg-gray-50 border border-gray-100 rounded-lg p-3">
+        <div className="mt-2 text-xs text-gray-500 space-y-1.5 bg-gray-50 border border-gray-100 rounded-lg p-3">
           <div className="flex justify-between gap-4">
             <span>
               Temp–dew point spread
-              <span className="block text-gray-400 text-[10.5px]">&lt;2° favorable, &lt;4° necessary</span>
+              <span className="block text-gray-400 text-[10px]">&lt;2° favorable, &lt;4° necessary</span>
             </span>
             <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
               {fog.inputs.spreadF != null ? `${fog.inputs.spreadF.toFixed(1)}°F` : "Not available"}
-              <span className="block text-gray-400 font-medium text-[10.5px]">{fog.spreadPoints} pt</span>
+              <span className="block text-gray-400 font-medium text-[10px]">{fog.spreadPoints} pt</span>
             </span>
           </div>
           <div className="flex justify-between gap-4 pt-1.5 border-t border-gray-100">
             <span>
               Relative humidity
-              <span className="block text-gray-400 text-[10.5px]">&gt;95% favorable, &gt;90% necessary</span>
+              <span className="block text-gray-400 text-[10px]">&gt;95% favorable, &gt;90% necessary</span>
             </span>
             <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
               {fog.inputs.relativeHumidity != null ? `${Math.round(fog.inputs.relativeHumidity)}%` : "Not available"}
-              <span className="block text-gray-400 font-medium text-[10.5px]">{fog.humidityPoints} pt</span>
+              <span className="block text-gray-400 font-medium text-[10px]">{fog.humidityPoints} pt</span>
             </span>
           </div>
           <div className="flex justify-between gap-4 pt-1.5 border-t border-gray-100">
             <span>
               Wind speed
-              <span className="block text-gray-400 text-[10.5px]">&lt;5mph favorable, &lt;10mph necessary</span>
+              <span className="block text-gray-400 text-[10px]">&lt;5mph favorable, &lt;10mph necessary</span>
             </span>
             <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
               {fog.inputs.windSpeedMph != null ? `${Math.round(fog.inputs.windSpeedMph)} mph` : "Not available"}
-              <span className="block text-gray-400 font-medium text-[10.5px]">{fog.windPoints} pt</span>
+              <span className="block text-gray-400 font-medium text-[10px]">{fog.windPoints} pt</span>
             </span>
           </div>
           <div className="flex justify-between pt-2 border-t border-gray-200 font-bold text-gray-700">
@@ -397,19 +430,29 @@ function EventTile({
   onPinMove: (lat: number, lng: number) => void;
 }) {
   const hasMap = event.bearingDeg != null;
+  const potential = computePotential(pointWeather, fog);
 
   return (
     <div className="border-t-[3px] border-indigo-500 pt-4 h-full flex flex-col">
-      <div className="flex items-center gap-2">
-        <EventIcon kind={event.kind} />
-        <div className={`${SERIF} text-[19px] font-semibold text-gray-900`}>{event.headerLabel}</div>
-        {event.moonIlluminationPercent != null && (
-          <span className="text-xs text-gray-400 font-medium">{event.moonIlluminationPercent}% illum.</span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <EventIcon kind={event.kind} />
+          <div className={`${SERIF} text-lg font-semibold text-gray-900`}>{event.headerLabel}</div>
+          {event.moonIlluminationPercent != null && (
+            <span className="text-xs text-gray-400 font-medium">{event.moonIlluminationPercent}% illum.</span>
+          )}
+        </div>
+        {potential && (
+          <span
+            className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${POTENTIAL_BADGE_COLORS[potential]}`}
+          >
+            {potential}
+          </span>
         )}
       </div>
       {event.timePoints && (
         <div className="my-2">
-          <div className="text-lg font-bold text-gray-900 tracking-tight flex flex-wrap items-baseline gap-x-1.5">
+          <div className={`${SERIF} text-lg font-bold text-gray-900 tracking-tight flex flex-wrap items-baseline gap-x-1.5`}>
             {event.timePoints.map((t, i) => (
               <span key={i} className="flex items-baseline gap-x-1.5">
                 {i > 0 && <span className="text-indigo-300 font-normal text-base">→</span>}
@@ -417,7 +460,7 @@ function EventTile({
               </span>
             ))}
           </div>
-          <div className="text-[11px] text-gray-400 mt-0.5 flex flex-wrap gap-x-1">
+          <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-x-1">
             {event.timePoints.map((t, i) => (
               <span key={i}>
                 {i > 0 && <span className="mx-0.5">→</span>}
@@ -428,7 +471,7 @@ function EventTile({
         </div>
       )}
       {event.detail && (
-        <div className="text-[12.5px] text-gray-500 leading-relaxed my-1.5">{event.detail}</div>
+        <div className="text-sm text-gray-500 leading-relaxed my-1.5">{event.detail}</div>
       )}
       {event.celestialLink && (
         <a
@@ -451,42 +494,28 @@ function EventTile({
         </div>
       )}
 
-      <div className="text-[11.5px] text-gray-500 space-y-1 mt-auto">
+      <div className="space-y-2.5 mt-auto">
         <div>
-          <span className="text-gray-400">At your location:</span>{" "}
-          {pointWeather
-            ? `${pointWeather.pin.tempF != null ? Math.round(pointWeather.pin.tempF) + "°F" : "Not available"} · ${fmtPercent(pointWeather.pin.precipProbability)} precip · ${fmtMiles(pointWeather.pin.visibilityMiles)} visibility`
-            : "Loading…"}{" "}
-          {pointWeather?.pin.sourceUrl && (
-            <a
-              href={pointWeather.pin.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-indigo-600 hover:text-indigo-700 font-semibold"
-            >
-              Verify
-            </a>
-          )}
+          <div className="text-xs text-gray-400 font-medium uppercase tracking-wide">At your location</div>
+          <div className="text-sm text-gray-800 font-semibold">
+            {pointWeather
+              ? `${pointWeather.pin.tempF != null ? Math.round(pointWeather.pin.tempF) + "°F" : "Not available"} · ${fmtPercent(pointWeather.pin.precipProbability)} precip · ${fmtMiles(pointWeather.pin.visibilityMiles)} visibility`
+              : "Loading…"}
+          </div>
         </div>
         {hasMap && (
           <div>
-            <span className="text-gray-400">Toward the event (20mi):</span>{" "}
-            {pointWeather
-              ? `Low ${fmtPercent(pointWeather.tip.cloudLow)} / Mid ${fmtPercent(pointWeather.tip.cloudMid)} / High ${fmtPercent(pointWeather.tip.cloudHigh)}`
-              : "Loading…"}{" "}
-            {pointWeather?.tip.sourceUrl && (
-              <a
-                href={pointWeather.tip.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-indigo-600 hover:text-indigo-700 font-semibold"
-              >
-                Verify
-              </a>
-            )}
+            <div className="text-xs text-gray-400 font-medium uppercase tracking-wide">
+              Toward the event (20mi)
+            </div>
+            <div className="text-sm text-gray-800 font-semibold">
+              {pointWeather
+                ? `Low ${fmtPercent(pointWeather.tip.cloudLow)} / Mid ${fmtPercent(pointWeather.tip.cloudMid)} / High ${fmtPercent(pointWeather.tip.cloudHigh)}`
+                : "Loading…"}
+            </div>
           </div>
         )}
-        <div className="text-gray-300">Source: Open-Meteo</div>
+        <div className="text-[10px] text-gray-300">Source: Open-Meteo</div>
       </div>
     </div>
   );
@@ -527,7 +556,7 @@ function DayRow({
 
   return (
     <div className={`space-y-4 ${showDivider ? "pt-8 border-t border-gray-200" : ""}`}>
-      <h3 className={`${SERIF} text-[21px] font-semibold text-gray-900 flex items-baseline gap-3`}>
+      <h3 className={`${SERIF} text-xl font-semibold text-gray-900 flex items-baseline gap-3`}>
         {label}
         <span className="flex-1 h-px bg-gray-200" />
       </h3>
@@ -722,13 +751,13 @@ export default function GoldenHourCalculator() {
       <div className="flex items-center justify-between gap-4 flex-wrap border-b border-gray-200 pb-3.5 mb-8">
         <div className="flex items-center gap-2">
           <ApertureIcon className="w-5 h-5 text-indigo-500" />
-          <span className={`${SERIF} font-semibold text-[17px] text-gray-900`}>Brooksl</span>
+          <span className={`${SERIF} font-semibold text-lg text-gray-900`}>Brooksl</span>
           <span className="text-gray-300">·</span>
-          <span className="text-[12.5px] text-gray-400">Photo planning, next 4 sunrises & sunsets</span>
+          <span className="text-xs text-gray-400">Photo planning, next 4 sunrises & sunsets</span>
         </div>
 
         <div className="flex items-center gap-2.5">
-          <label className="flex items-center gap-1.5 border border-gray-200 rounded-full pl-3.5 pr-3 py-1.5 text-[13px] font-medium text-gray-700">
+          <label className="flex items-center gap-1.5 border border-gray-200 rounded-full pl-3.5 pr-3 py-1.5 text-sm font-medium text-gray-700">
             <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
             <input
               type="date"
@@ -743,7 +772,7 @@ export default function GoldenHourCalculator() {
           <div className="relative" ref={locationPopoverRef}>
             <button
               onClick={() => setLocationOpen((v) => !v)}
-              className="flex items-center gap-1.5 border border-indigo-200 bg-indigo-50 rounded-full pl-3 pr-2.5 py-1.5 text-[13px] font-medium text-indigo-700"
+              className="flex items-center gap-1.5 border border-indigo-200 bg-indigo-50 rounded-full pl-3 pr-2.5 py-1.5 text-sm font-medium text-indigo-700"
             >
               <PinIcon className="w-3.5 h-3.5 text-indigo-500" />
               {loading ? "Detecting…" : (cityState ?? "Set location")}
@@ -785,7 +814,7 @@ export default function GoldenHourCalculator() {
                   </button>
                 ))}
 
-                {geoError && <p className="text-red-600 text-[11px] mt-1.5 px-1">{geoError}</p>}
+                {geoError && <p className="text-red-600 text-xs mt-1.5 px-1">{geoError}</p>}
               </div>
             )}
           </div>
