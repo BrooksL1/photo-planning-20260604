@@ -21,6 +21,7 @@ export type FogAssessment = {
   humidityPoints: number;
   windPoints: number;
   cloudPoints: number;
+  reason: string;
   inputs: FogInputs;
 };
 
@@ -105,14 +106,39 @@ function scoreCloud(cloudCoverPercent: number | null): number {
   return 0;
 }
 
+function joinWithAnd(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
 function assess(inputs: FogInputs): FogAssessment {
   const spreadPoints = scoreSpread(inputs.spreadF);
   const humidityPoints = scoreHumidity(inputs.relativeHumidity);
   const windPoints = scoreWind(inputs.windSpeedMph);
   const cloudPoints = scoreCloud(inputs.cloudCoverPercent);
   const points = spreadPoints + humidityPoints + windPoints + cloudPoints;
-  const likelihood: FogLikelihood = points >= 7 ? "Highly Favorable" : points >= 5 ? "Possible" : "Unlikely";
-  return { likelihood, points, spreadPoints, humidityPoints, windPoints, cloudPoints, inputs };
+  // Fog needs every condition working together -- one limiting factor (0 pt)
+  // rules it out regardless of how favorable the others are.
+  const limitingFactors: string[] = [];
+  if (spreadPoints === 0) limitingFactors.push("temp–dew point spread");
+  if (humidityPoints === 0) limitingFactors.push("humidity");
+  if (windPoints === 0) limitingFactors.push("wind");
+  if (cloudPoints === 0) limitingFactors.push("cloud cover");
+  const anyLimiting = limitingFactors.length > 0;
+  const likelihood: FogLikelihood = anyLimiting ? "Unlikely" : points === 8 ? "Highly Favorable" : "Possible";
+
+  let reason: string;
+  if (anyLimiting) {
+    const verb = limitingFactors.length > 1 ? "aren't" : "isn't";
+    reason = `Unlikely: ${joinWithAnd(limitingFactors)} ${verb} favorable for fog to form.`;
+  } else if (likelihood === "Highly Favorable") {
+    reason = "Highly Favorable: clear skies, high humidity, calm wind, and a tight temp–dew point spread all support fog forming.";
+  } else {
+    reason = "Possible: conditions are workable for fog, but not every factor is optimal.";
+  }
+
+  return { likelihood, points, spreadPoints, humidityPoints, windPoints, cloudPoints, reason, inputs };
 }
 
 export async function fetchFogAssessments(

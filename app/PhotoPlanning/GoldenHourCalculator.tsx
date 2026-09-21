@@ -232,6 +232,10 @@ const FOG_BADGE_COLORS: Record<FogLikelihood, string> = {
   Unlikely: "bg-gray-100 text-gray-500",
 };
 
+function fogPointLabel(points: number): string {
+  return points === 2 ? "Favorable" : points === 1 ? "Possible" : "Limiting";
+}
+
 function FogBadge({ fog }: { fog: FogAssessment | null }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -241,12 +245,19 @@ function FogBadge({ fog }: { fog: FogAssessment | null }) {
 
   return (
     <div className="mb-3">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${FOG_BADGE_COLORS[fog.likelihood]}`}
-      >
-        Fog · {fog.likelihood} {expanded ? "▾" : "▸"}
-      </button>
+      <div className="relative inline-block group">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap transition-colors ${FOG_BADGE_COLORS[fog.likelihood]}`}
+        >
+          Fog · {fog.likelihood} {expanded ? "▾" : "▸"}
+        </button>
+        {!expanded && (
+          <div className="pointer-events-none absolute left-0 top-full mt-1.5 w-56 rounded-lg bg-gray-900 text-white text-xs leading-relaxed p-2.5 opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-lg">
+            {fog.reason}
+          </div>
+        )}
+      </div>
       {expanded && (
         <div className="mt-2 text-xs text-gray-500 space-y-1.5 bg-gray-50 border border-gray-100 rounded-lg p-3">
           <div className="flex justify-between gap-4">
@@ -256,7 +267,7 @@ function FogBadge({ fog }: { fog: FogAssessment | null }) {
             </span>
             <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
               {fog.inputs.spreadF != null ? `${fog.inputs.spreadF.toFixed(1)}°F` : "Not available"}
-              <span className="block text-gray-400 font-medium text-[10px]">{fog.spreadPoints} pt</span>
+              <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(fog.spreadPoints)}</span>
             </span>
           </div>
           <div className="flex justify-between gap-4 pt-1.5 border-t border-gray-100">
@@ -266,7 +277,7 @@ function FogBadge({ fog }: { fog: FogAssessment | null }) {
             </span>
             <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
               {fog.inputs.relativeHumidity != null ? `${Math.round(fog.inputs.relativeHumidity)}%` : "Not available"}
-              <span className="block text-gray-400 font-medium text-[10px]">{fog.humidityPoints} pt</span>
+              <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(fog.humidityPoints)}</span>
             </span>
           </div>
           <div className="flex justify-between gap-4 pt-1.5 border-t border-gray-100">
@@ -276,7 +287,7 @@ function FogBadge({ fog }: { fog: FogAssessment | null }) {
             </span>
             <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
               {fog.inputs.windSpeedMph != null ? `${Math.round(fog.inputs.windSpeedMph)} mph` : "Not available"}
-              <span className="block text-gray-400 font-medium text-[10px]">{fog.windPoints} pt</span>
+              <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(fog.windPoints)}</span>
             </span>
           </div>
           <div className="flex justify-between gap-4 pt-1.5 border-t border-gray-100">
@@ -286,7 +297,7 @@ function FogBadge({ fog }: { fog: FogAssessment | null }) {
             </span>
             <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
               {fog.inputs.cloudCoverPercent != null ? `${Math.round(fog.inputs.cloudCoverPercent)}%` : "Not available"}
-              <span className="block text-gray-400 font-medium text-[10px]">{fog.cloudPoints} pt</span>
+              <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(fog.cloudPoints)}</span>
             </span>
           </div>
           <div className="flex justify-between pt-2 border-t border-gray-200 font-bold text-gray-700">
@@ -299,13 +310,31 @@ function FogBadge({ fog }: { fog: FogAssessment | null }) {
   );
 }
 
-function SunGlyph() {
-  return <circle cx="9" cy="12" r="5" stroke="currentColor" strokeWidth="1.5" />;
+// Horizon + rays/crescent scenes for the event icons -- a horizon line, the
+// sun (sitting on it, flat edge down, with a few rays) or moon (a crescent
+// floating just above it), and a small directional arrow indicating rise vs.
+// set. Kept as separate pieces so EventIcon can compose them per kind.
+function HorizonLine() {
+  return <path d="M2 18h20" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.5" />;
 }
-function MoonGlyph() {
+function SunOnHorizon() {
+  return (
+    <>
+      <path d="M6 18a5 5 0 0 1 10 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path
+        d="M2.8 18h1.2M17 18h1.2M4.9 14.3l.9.75M15.2 15.05l.9-.75"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        opacity="0.7"
+      />
+    </>
+  );
+}
+function MoonAboveHorizon() {
   return (
     <path
-      d="M13 7a5 5 0 1 0 4 8 6 6 0 0 1-4-8Z"
+      d="M15.5 13.4a4.5 4.5 0 1 1-4.9-4.9 3.5 3.5 0 0 0 4.9 4.9Z"
       stroke="currentColor"
       strokeWidth="1.5"
       strokeLinejoin="round"
@@ -315,9 +344,9 @@ function MoonGlyph() {
 function UpArrow() {
   return (
     <path
-      d="M19 17V6M15.5 9.5 19 6l3.5 3.5"
+      d="M20 10V3.5M17 6.5 20 3.5l3 3"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -326,9 +355,9 @@ function UpArrow() {
 function DownArrow() {
   return (
     <path
-      d="M19 7v11M15.5 14.5 19 18l3.5-3.5"
+      d="M20 3.5V10M17 7l3 3 3-3"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -401,33 +430,37 @@ function SearchIcon({ className }: { className?: string }) {
 }
 
 function EventIcon({ kind }: { kind: UnifiedEventKind }) {
-  const className = "w-[19px] h-[19px] flex-shrink-0 text-indigo-500";
+  const className = "w-6 h-6 flex-shrink-0 text-indigo-500";
   switch (kind) {
     case "Sunrise":
       return (
         <svg viewBox="0 0 24 24" fill="none" className={className}>
-          <SunGlyph />
+          <HorizonLine />
+          <SunOnHorizon />
           <UpArrow />
         </svg>
       );
     case "Sunset":
       return (
         <svg viewBox="0 0 24 24" fill="none" className={className}>
-          <SunGlyph />
+          <HorizonLine />
+          <SunOnHorizon />
           <DownArrow />
         </svg>
       );
     case "Moonrise":
       return (
         <svg viewBox="0 0 24 24" fill="none" className={className}>
-          <MoonGlyph />
+          <HorizonLine />
+          <MoonAboveHorizon />
           <UpArrow />
         </svg>
       );
     case "Moonset":
       return (
         <svg viewBox="0 0 24 24" fill="none" className={className}>
-          <MoonGlyph />
+          <HorizonLine />
+          <MoonAboveHorizon />
           <DownArrow />
         </svg>
       );
@@ -509,9 +542,9 @@ function EventTile({
       {event.timePoints && (
         <div className={`my-2 grid ${event.timePoints.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
           {event.timePoints.map((t, i) => (
-            <div key={i} className="text-center px-1">
-              <div className={`${SERIF} text-lg font-bold text-gray-900 tracking-tight`}>{fmt(t.date)}</div>
-              <div className="text-xs text-gray-400 mt-0.5">{t.label}</div>
+            <div key={i} className="text-center px-1 min-w-0">
+              <div className={`${SERIF} text-lg font-bold text-gray-900 tracking-tight truncate`}>{fmt(t.date)}</div>
+              <div className="text-xs text-gray-400 mt-0.5 truncate">{t.label}</div>
             </div>
           ))}
         </div>
@@ -532,36 +565,37 @@ function EventTile({
       <FogBadge fog={fog} />
 
       {hasMap && (
-        <div className="relative rounded-lg overflow-hidden mb-3">
+        <div className="relative z-0 rounded-lg overflow-hidden mb-3">
           <EventMap pinLat={pinLat} pinLng={pinLng} bearingDeg={event.bearingDeg!} onPinMove={onPinMove} />
-          <div className="absolute bottom-2 left-2 text-[10px] text-gray-500 bg-white/90 px-2 py-0.5 rounded-full">
+          <div className="absolute bottom-2 left-2 right-2 text-[10px] text-gray-500 bg-white/90 px-2 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis">
             Pin · arrow toward {eventDirectionLabel(event.kind)}, 20mi
           </div>
         </div>
       )}
 
       <div className="space-y-2.5 mt-auto">
-        <div>
-          <div className="text-xs text-gray-400 font-medium uppercase tracking-wide">At your location</div>
-          <div className="text-sm text-gray-800 font-semibold">
+        <div className="min-w-0">
+          <div className="text-xs text-gray-400 font-medium uppercase tracking-wide whitespace-nowrap">
+            At your location
+          </div>
+          <div className="text-sm text-gray-800 font-semibold truncate">
             {pointWeather
               ? `${pointWeather.pin.tempF != null ? Math.round(pointWeather.pin.tempF) + "°F" : "Not available"} · ${fmtPercent(pointWeather.pin.precipProbability)} precip · ${fmtMiles(pointWeather.pin.visibilityMiles)} visibility`
               : "Loading…"}
           </div>
         </div>
         {hasMap && (
-          <div>
-            <div className="text-xs text-gray-400 font-medium uppercase tracking-wide">
+          <div className="min-w-0">
+            <div className="text-xs text-gray-400 font-medium uppercase tracking-wide whitespace-nowrap">
               Toward the event (20mi)
             </div>
-            <div className="text-sm text-gray-800 font-semibold">
+            <div className="text-sm text-gray-800 font-semibold truncate">
               {pointWeather
                 ? `Low ${fmtPercent(pointWeather.tip.cloudLow)} / Mid ${fmtPercent(pointWeather.tip.cloudMid)} / High ${fmtPercent(pointWeather.tip.cloudHigh)}`
                 : "Loading…"}
             </div>
           </div>
         )}
-        <div className="text-[10px] text-gray-300">Source: Open-Meteo</div>
       </div>
     </div>
   );
@@ -901,6 +935,7 @@ export default function GoldenHourCalculator() {
               </a>
             </div>
           )}
+          <p className="text-[10px] text-gray-300 text-center pt-8">Weather source: Open-Meteo</p>
         </div>
       )}
     </div>
