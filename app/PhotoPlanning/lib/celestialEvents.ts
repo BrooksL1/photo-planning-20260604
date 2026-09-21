@@ -1,7 +1,5 @@
 import type { CelestialEvent } from "./types";
 
-const WINDOW_HOURS = 48;
-
 // Hardcoded from NASA's eclipse decade tables (eclipse.gsfc.nasa.gov) --
 // there is no free queryable eclipse API. Dates/regions are approximate;
 // verify exact local contact times via the linked source. This list will
@@ -56,11 +54,10 @@ function nextOccurrence(month: number, day: number, now: Date): Date {
 }
 
 /**
- * Eclipses and meteor shower peaks falling in the next 48 hours, plus a
+ * Eclipses and meteor shower peaks falling within [now, windowEnd], plus a
  * standing "not available" note for comets (see COMET_NOTE above for why).
  */
-export function getUpcomingCelestialEvents(now: Date = new Date()): CelestialEvent[] {
-  const windowEnd = new Date(now.getTime() + WINDOW_HOURS * 60 * 60 * 1000);
+export function getUpcomingCelestialEvents(windowEnd: Date, now: Date = new Date()): CelestialEvent[] {
   const events: CelestialEvent[] = [];
 
   for (const eclipse of ECLIPSES) {

@@ -24,9 +24,3 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
-
-/* Fakes a dark basemap over standard (free, keyless) OpenStreetMap tiles --
-   no dark tile provider offers an unwatermarked free tier. */
-.map-tiles-dark {
-  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
-}

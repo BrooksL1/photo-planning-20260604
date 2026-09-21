@@ -12,6 +12,7 @@ export type PointReading = {
   cloudLow: number | null;
   cloudMid: number | null;
   cloudHigh: number | null;
+  sourceUrl: string;
 };
 
 export async function fetchPointWeather(lat: number, lng: number, target: Date): Promise<PointReading> {
@@ -19,7 +20,7 @@ export async function fetchPointWeather(lat: number, lng: number, target: Date):
     "https://api.open-meteo.com/v1/forecast" +
     `?latitude=${lat}&longitude=${lng}` +
     "&hourly=temperature_2m,precipitation_probability,visibility,cloud_cover_low,cloud_cover_mid,cloud_cover_high" +
-    "&temperature_unit=fahrenheit&forecast_days=3&timezone=auto";
+    "&temperature_unit=fahrenheit&forecast_days=7&timezone=auto";
 
   const res = await fetch(url);
   if (!res.ok) {
@@ -46,5 +47,6 @@ export async function fetchPointWeather(lat: number, lng: number, target: Date):
     cloudLow: data.hourly.cloud_cover_low[bestIdx] ?? null,
     cloudMid: data.hourly.cloud_cover_mid[bestIdx] ?? null,
     cloudHigh: data.hourly.cloud_cover_high[bestIdx] ?? null,
+    sourceUrl: url,
   };
 }

@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import SunCalc from "suncalc";
-import type { SolarEvent, MoonEvent, CelestialEvent, SourceReading, SourceName } from "./lib/types";
+import type { SolarEvent, MoonEvent, CelestialEvent } from "./lib/types";
 import { getUpcomingSolarEvents } from "./lib/solarEvents";
 import { getUpcomingMoonEvents } from "./lib/moonEvents";
 import { getUpcomingCelestialEvents } from "./lib/celestialEvents";
-import { fetchOpenMeteoReadings } from "./lib/openMeteoSource";
 import { fetchFogAssessments, type FogAssessment, type FogLikelihood } from "./lib/fogPredictor";
 import { searchPlaces, type PlaceSuggestion } from "./lib/geocode";
 import { destinationPoint, toCompassBearing } from "./lib/geo";
@@ -16,10 +15,10 @@ import { fetchPointWeather, type PointReading } from "./lib/pointWeather";
 // Leaflet touches `window` at import time -- must load client-only.
 const EventMap = dynamic(() => import("./EventMap"), {
   ssr: false,
-  loading: () => <div className="h-[220px] bg-gray-800 rounded-lg animate-pulse" />,
+  loading: () => <div className="h-[150px] bg-gray-100 rounded-lg animate-pulse" />,
 });
 
-type EventReading = { source: SourceName; reading: SourceReading };
+const SERIF = "font-[family-name:var(--font-fraunces)]";
 
 type UnifiedEventKind = "Sunrise" | "Sunset" | "Moonrise" | "Moonset" | "Eclipse" | "Meteor Shower";
 
@@ -31,9 +30,6 @@ type UnifiedEvent = {
   detailLine: string;
   moonIlluminationPercent?: number;
   celestialLink?: { url: string; label: string };
-  // Compass bearing (degrees from north) toward the sun/moon at primaryTime
-  // -- only defined for Sunrise/Sunset/Moonrise/Moonset, which have a
-  // well-defined direction. Drives the map's arrow.
   bearingDeg?: number;
 };
 
@@ -57,26 +53,6 @@ function todayLocalISO(): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${mm}-${dd}`;
-}
-
-function fallbackReadings(count: number, reason: string): SourceReading[] {
-  return Array.from({ length: count }, () => ({
-    cloudLow: null,
-    cloudMid: null,
-    cloudHigh: null,
-    visibilityMiles: null,
-    precipProbability: null,
-    sourceUrl: "",
-    note: reason,
-  }));
-}
-
-function describeFailure(result: PromiseSettledResult<SourceReading[]>): string {
-  return result.status === "rejected"
-    ? result.reason instanceof Error
-      ? result.reason.message
-      : String(result.reason)
-    : "Unavailable";
 }
 
 async function fetchCityState(lat: number, lng: number): Promise<string | null> {
@@ -114,7 +90,7 @@ function buildUnifiedEvents(
       id: `solar-${i}`,
       kind: e.kind,
       primaryTime: e.at,
-      headerLabel: `${e.kind} – ${fmt(e.at)}`,
+      headerLabel: `${e.kind} · ${fmt(e.at)}`,
       detailLine: e.boundaryTimes.map((b) => `${b.label} ${fmt(b.date)}`).join(" · "),
       bearingDeg,
     });
@@ -129,7 +105,7 @@ function buildUnifiedEvents(
       id: `moon-${i}`,
       kind: e.kind,
       primaryTime,
-      headerLabel: `${e.kind} – ${fmt(primaryTime)}`,
+      headerLabel: `${e.kind} · ${fmt(primaryTime)}`,
       detailLine: e.times.map((t) => `${t.label} ${fmt(t.date)}`).join(" · "),
       moonIlluminationPercent: illumination,
       bearingDeg,
@@ -142,7 +118,7 @@ function buildUnifiedEvents(
       id: `celestial-${i}`,
       kind: e.category === "Eclipse" ? "Eclipse" : "Meteor Shower",
       primaryTime: e.date,
-      headerLabel: `${e.title} – ${fmt(e.date)}`,
+      headerLabel: `${e.title} · ${fmt(e.date)}`,
       detailLine: e.detail,
       celestialLink: { url: e.sourceUrl, label: "Verify source" },
     });
@@ -174,64 +150,61 @@ function groupByDay(events: UnifiedEvent[]): { key: string; label: string; items
 }
 
 const FOG_BADGE_COLORS: Record<FogLikelihood, string> = {
-  "Highly Favorable": "bg-sky-900/60 text-sky-200 border-sky-700",
-  Possible: "bg-amber-900/50 text-amber-200 border-amber-700",
-  Unlikely: "bg-gray-800 text-gray-400 border-gray-700",
+  "Highly Favorable": "bg-emerald-50 text-emerald-700",
+  Possible: "bg-amber-50 text-amber-700",
+  Unlikely: "bg-gray-100 text-gray-500",
 };
 
 function FogBadge({ fog }: { fog: FogAssessment | null }) {
   const [expanded, setExpanded] = useState(false);
 
   if (!fog) {
-    return <span className="text-xs text-gray-600">Fog: Not available</span>;
+    return <span className="text-xs text-gray-400">Fog: Not available</span>;
   }
 
   return (
-    <div className="mt-2">
+    <div className="mb-3">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className={`text-xs px-2 py-1 rounded-full border transition-colors ${FOG_BADGE_COLORS[fog.likelihood]}`}
+        className={`text-[11px] font-semibold px-3 py-1 rounded-full transition-colors ${FOG_BADGE_COLORS[fog.likelihood]}`}
       >
-        Fog: {fog.likelihood} {expanded ? "▾" : "▸"}
+        Fog · {fog.likelihood} {expanded ? "▾" : "▸"}
       </button>
       {expanded && (
-        <div className="mt-2 text-xs text-gray-400 space-y-2 bg-gray-950/60 rounded-lg p-3">
+        <div className="mt-2 text-[11.5px] text-gray-500 space-y-1.5 bg-gray-50 border border-gray-100 rounded-lg p-3">
           <div className="flex justify-between gap-4">
             <span>
               Temp–dew point spread
-              <span className="block text-gray-600">&lt;2° highly favorable, &lt;4° necessary</span>
+              <span className="block text-gray-400 text-[10.5px]">&lt;2° favorable, &lt;4° necessary</span>
             </span>
-            <span className="font-mono text-gray-200 text-right whitespace-nowrap">
+            <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
               {fog.inputs.spreadF != null ? `${fog.inputs.spreadF.toFixed(1)}°F` : "Not available"}
-              <br />
-              {fog.spreadPoints} pt
+              <span className="block text-gray-400 font-medium text-[10.5px]">{fog.spreadPoints} pt</span>
             </span>
           </div>
-          <div className="flex justify-between gap-4">
+          <div className="flex justify-between gap-4 pt-1.5 border-t border-gray-100">
             <span>
               Relative humidity
-              <span className="block text-gray-600">&gt;95% highly favorable, &gt;90% necessary</span>
+              <span className="block text-gray-400 text-[10.5px]">&gt;95% favorable, &gt;90% necessary</span>
             </span>
-            <span className="font-mono text-gray-200 text-right whitespace-nowrap">
+            <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
               {fog.inputs.relativeHumidity != null ? `${Math.round(fog.inputs.relativeHumidity)}%` : "Not available"}
-              <br />
-              {fog.humidityPoints} pt
+              <span className="block text-gray-400 font-medium text-[10.5px]">{fog.humidityPoints} pt</span>
             </span>
           </div>
-          <div className="flex justify-between gap-4">
+          <div className="flex justify-between gap-4 pt-1.5 border-t border-gray-100">
             <span>
               Wind speed
-              <span className="block text-gray-600">&lt;5mph highly favorable, &lt;10mph necessary</span>
+              <span className="block text-gray-400 text-[10.5px]">&lt;5mph favorable, &lt;10mph necessary</span>
             </span>
-            <span className="font-mono text-gray-200 text-right whitespace-nowrap">
+            <span className="text-gray-900 font-semibold text-right whitespace-nowrap">
               {fog.inputs.windSpeedMph != null ? `${Math.round(fog.inputs.windSpeedMph)} mph` : "Not available"}
-              <br />
-              {fog.windPoints} pt
+              <span className="block text-gray-400 font-medium text-[10.5px]">{fog.windPoints} pt</span>
             </span>
           </div>
-          <div className="flex justify-between pt-2 border-t border-gray-800 font-medium text-gray-300">
+          <div className="flex justify-between pt-2 border-t border-gray-200 font-bold text-gray-700">
             <span>Total</span>
-            <span className="font-mono">{fog.points} / 6</span>
+            <span>{fog.points} / 6</span>
           </div>
         </div>
       )}
@@ -282,7 +255,7 @@ function ApertureIcon({ className }: { className?: string }) {
       <path
         d="M12 7.5 15 12l-3 4.5M9 7.5 6 12l3 4.5M7.5 9h9M7.5 15h9"
         stroke="currentColor"
-        strokeWidth="1.2"
+        strokeWidth="1.1"
         strokeLinecap="round"
         strokeLinejoin="round"
         opacity="0.7"
@@ -294,8 +267,8 @@ function ApertureIcon({ className }: { className?: string }) {
 function CalendarIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <rect x="3.5" y="5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M3.5 9.5h17M8 3v3.5M16 3v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="3.5" y="5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3.5 9.5h17M8 3v3.5M16 3v3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -306,16 +279,42 @@ function PinIcon({ className }: { className?: string }) {
       <path
         d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="2"
         strokeLinejoin="round"
       />
-      <circle cx="12" cy="9.5" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="12" cy="9.5" r="2.5" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DeviceLocationIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+      <path d="m21 21-4.3-4.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
 
 function EventIcon({ kind }: { kind: UnifiedEventKind }) {
-  const className = "w-5 h-5 flex-shrink-0 text-amber-400";
+  const className = "w-[19px] h-[19px] flex-shrink-0 text-indigo-500";
   switch (kind) {
     case "Sunrise":
       return (
@@ -362,9 +361,23 @@ function EventIcon({ kind }: { kind: UnifiedEventKind }) {
   }
 }
 
+function eventDirectionLabel(kind: UnifiedEventKind): string {
+  switch (kind) {
+    case "Sunrise":
+      return "sunrise";
+    case "Sunset":
+      return "sunset";
+    case "Moonrise":
+      return "moonrise";
+    case "Moonset":
+      return "moonset";
+    default:
+      return "event";
+  }
+}
+
 function EventTile({
   event,
-  readings,
   fog,
   pinLat,
   pinLng,
@@ -372,112 +385,82 @@ function EventTile({
   onPinMove,
 }: {
   event: UnifiedEvent;
-  readings: EventReading[];
   fog: FogAssessment | null;
   pinLat: number;
   pinLng: number;
   pointWeather: PointWeatherPair | null;
   onPinMove: (lat: number, lng: number) => void;
 }) {
+  const hasMap = event.bearingDeg != null;
+
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden h-full">
-      <div className="px-4 py-3 bg-gray-800/60">
-        <div className="flex items-center gap-2">
-          <EventIcon kind={event.kind} />
-          <div className="text-lg font-bold text-white">{event.headerLabel}</div>
-          {event.moonIlluminationPercent != null && (
-            <span className="text-sm text-gray-400">({event.moonIlluminationPercent}% illuminated)</span>
-          )}
-        </div>
-        <div className="text-xs text-gray-400 mt-1">{event.detailLine}</div>
-        {event.celestialLink && (
-          <a
-            href={event.celestialLink.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-amber-400 hover:text-amber-300 text-xs mt-1 inline-block"
-          >
-            {event.celestialLink.label}
-          </a>
+    <div className="border-t-[3px] border-indigo-500 pt-4 h-full flex flex-col">
+      <div className="flex items-center gap-2">
+        <EventIcon kind={event.kind} />
+        <div className={`${SERIF} text-[19px] font-semibold text-gray-900`}>{event.headerLabel}</div>
+        {event.moonIlluminationPercent != null && (
+          <span className="text-xs text-gray-400 font-medium">{event.moonIlluminationPercent}% illum.</span>
         )}
-        {readings.length > 0 && <FogBadge fog={fog} />}
       </div>
-      {event.bearingDeg != null && (
-        <div className="border-t border-gray-800">
-          <EventMap pinLat={pinLat} pinLng={pinLng} bearingDeg={event.bearingDeg} onPinMove={onPinMove} />
-          <div className="px-4 py-2 text-xs text-gray-400 space-y-0.5 bg-gray-950/40">
-            <div>
-              <span className="text-gray-500">At your location:</span>{" "}
-              {pointWeather
-                ? `${pointWeather.pin.tempF != null ? Math.round(pointWeather.pin.tempF) + "°F" : "Not available"} · ${fmtPercent(pointWeather.pin.precipProbability)} precip · ${fmtMiles(pointWeather.pin.visibilityMiles)} visibility`
-                : "Loading…"}
-            </div>
-            <div>
-              <span className="text-gray-500">Toward the event (20mi):</span>{" "}
-              {pointWeather
-                ? `Low ${fmtPercent(pointWeather.tip.cloudLow)} / Mid ${fmtPercent(pointWeather.tip.cloudMid)} / High ${fmtPercent(pointWeather.tip.cloudHigh)}`
-                : "Loading…"}
-            </div>
-            <div className="text-gray-600">Drag the pin to change location.</div>
+      <div className="text-[12.5px] text-gray-500 leading-relaxed my-1.5">{event.detailLine}</div>
+      {event.celestialLink && (
+        <a
+          href={event.celestialLink.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-indigo-600 hover:text-indigo-700 text-xs font-semibold mb-3 inline-block"
+        >
+          {event.celestialLink.label}
+        </a>
+      )}
+      <FogBadge fog={fog} />
+
+      {hasMap && (
+        <div className="relative rounded-lg overflow-hidden mb-3">
+          <EventMap pinLat={pinLat} pinLng={pinLng} bearingDeg={event.bearingDeg!} onPinMove={onPinMove} />
+          <div className="absolute bottom-2 left-2 text-[10px] text-gray-500 bg-white/90 px-2 py-0.5 rounded-full">
+            Pin · arrow toward {eventDirectionLabel(event.kind)}, 20mi
           </div>
         </div>
       )}
-      {readings.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-separate border-spacing-0 min-w-[520px]">
-            <thead>
-              <tr className="text-gray-500 text-xs uppercase tracking-wide">
-                <th className="text-left font-normal py-2 px-3">Source</th>
-                <th className="text-right font-normal py-2 px-3">Low</th>
-                <th className="text-right font-normal py-2 px-3">Mid</th>
-                <th className="text-right font-normal py-2 px-3">High</th>
-                <th className="text-right font-normal py-2 px-3">Visibility</th>
-                <th className="text-right font-normal py-2 px-3">Precip</th>
-                <th className="text-right font-normal py-2 px-3">Verify</th>
-              </tr>
-            </thead>
-            <tbody>
-              {readings.map(({ source, reading }) => (
-                <tr key={source} className="border-t border-gray-800">
-                  <td className="py-2 px-3 text-white align-top">
-                    {source}
-                    {reading.note && <div className="text-xs text-gray-500 mt-0.5">{reading.note}</div>}
-                  </td>
-                  <td className="py-2 px-3 text-right font-mono text-gray-200 align-top">
-                    {fmtPercent(reading.cloudLow)}
-                  </td>
-                  <td className="py-2 px-3 text-right font-mono text-gray-200 align-top">
-                    {fmtPercent(reading.cloudMid)}
-                  </td>
-                  <td className="py-2 px-3 text-right font-mono text-gray-200 align-top">
-                    {fmtPercent(reading.cloudHigh)}
-                  </td>
-                  <td className="py-2 px-3 text-right font-mono text-gray-200 align-top">
-                    {fmtMiles(reading.visibilityMiles)}
-                  </td>
-                  <td className="py-2 px-3 text-right font-mono text-gray-200 align-top">
-                    {fmtPercent(reading.precipProbability)}
-                  </td>
-                  <td className="py-2 px-3 text-right align-top">
-                    {reading.sourceUrl ? (
-                      <a
-                        href={reading.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-amber-400 hover:text-amber-300 text-xs"
-                      >
-                        Link
-                      </a>
-                    ) : (
-                      <span className="text-gray-600 text-xs">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+      <div className="text-[11.5px] text-gray-500 space-y-1 mt-auto">
+        <div>
+          <span className="text-gray-400">At your location:</span>{" "}
+          {pointWeather
+            ? `${pointWeather.pin.tempF != null ? Math.round(pointWeather.pin.tempF) + "°F" : "Not available"} · ${fmtPercent(pointWeather.pin.precipProbability)} precip · ${fmtMiles(pointWeather.pin.visibilityMiles)} visibility`
+            : "Loading…"}{" "}
+          {pointWeather?.pin.sourceUrl && (
+            <a
+              href={pointWeather.pin.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-600 hover:text-indigo-700 font-semibold"
+            >
+              Verify
+            </a>
+          )}
         </div>
-      )}
+        {hasMap && (
+          <div>
+            <span className="text-gray-400">Toward the event (20mi):</span>{" "}
+            {pointWeather
+              ? `Low ${fmtPercent(pointWeather.tip.cloudLow)} / Mid ${fmtPercent(pointWeather.tip.cloudMid)} / High ${fmtPercent(pointWeather.tip.cloudHigh)}`
+              : "Loading…"}{" "}
+            {pointWeather?.tip.sourceUrl && (
+              <a
+                href={pointWeather.tip.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-600 hover:text-indigo-700 font-semibold"
+              >
+                Verify
+              </a>
+            )}
+          </div>
+        )}
+        <div className="text-gray-300">Source: Open-Meteo</div>
+      </div>
     </div>
   );
 }
@@ -485,7 +468,6 @@ function EventTile({
 function DayRow({
   label,
   items,
-  eventReadings,
   fogAssessments,
   pointWeatherByEvent,
   pinLat,
@@ -494,7 +476,6 @@ function DayRow({
 }: {
   label: string;
   items: IndexedEvent[];
-  eventReadings: EventReading[][];
   fogAssessments: (FogAssessment | null)[];
   pointWeatherByEvent: (PointWeatherPair | null)[];
   pinLat: number;
@@ -507,7 +488,6 @@ function DayRow({
     <EventTile
       key={event.id}
       event={event}
-      readings={eventReadings[index] ?? []}
       fog={fogAssessments[index] ?? null}
       pinLat={pinLat}
       pinLng={pinLng}
@@ -517,18 +497,21 @@ function DayRow({
   );
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-white font-semibold text-lg">{label}</h3>
+    <div className="space-y-4">
+      <h3 className={`${SERIF} text-[21px] font-semibold text-gray-900 flex items-baseline gap-3`}>
+        {label}
+        <span className="flex-1 h-px bg-gray-200" />
+      </h3>
       {useSlider ? (
-        <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2">
+        <div className="flex gap-7 overflow-x-auto snap-x snap-mandatory pb-2">
           {items.map((item) => (
-            <div key={item.event.id} className="flex-none w-[min(90vw,420px)] xl:w-[calc(33.333%-1rem)] snap-start">
+            <div key={item.event.id} className="flex-none w-[min(90vw,380px)] xl:w-[calc(33.333%-1.2rem)] snap-start">
               {tile(item)}
             </div>
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-7 items-stretch">
           {items.map((item) => tile(item))}
         </div>
       )}
@@ -543,13 +526,14 @@ export default function GoldenHourCalculator() {
   const [cityState, setCityState] = useState<string | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [locationOpen, setLocationOpen] = useState(false);
+  const locationPopoverRef = useRef<HTMLDivElement>(null);
 
   const [locationQuery, setLocationQuery] = useState("");
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [searching, setSearching] = useState(false);
 
   const [unifiedEvents, setUnifiedEvents] = useState<UnifiedEvent[]>([]);
-  const [eventReadings, setEventReadings] = useState<EventReading[][]>([]);
   const [fogAssessments, setFogAssessments] = useState<(FogAssessment | null)[]>([]);
   const [pointWeatherByEvent, setPointWeatherByEvent] = useState<(PointWeatherPair | null)[]>([]);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -572,6 +556,7 @@ export default function GoldenHourCalculator() {
         setLat(pos.coords.latitude);
         setLng(pos.coords.longitude);
         setLoading(false);
+        setLocationOpen(false);
       },
       () => {
         setGeoError("Location access denied. Search for a location below.");
@@ -584,9 +569,10 @@ export default function GoldenHourCalculator() {
     setLat(s.lat);
     setLng(s.lng);
     setCityState(s.label);
-    setLocationQuery(s.label);
+    setLocationQuery("");
     setSuggestions([]);
     setGeoError(null);
+    setLocationOpen(false);
   }
 
   // Ask for the user's location as soon as the app loads, rather than
@@ -595,6 +581,18 @@ export default function GoldenHourCalculator() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial geolocation prompt on mount
     detectLocation();
   }, []);
+
+  // Close the location popover on outside click.
+  useEffect(() => {
+    if (!locationOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (locationPopoverRef.current && !locationPopoverRef.current.contains(e.target as Node)) {
+        setLocationOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [locationOpen]);
 
   useEffect(() => {
     if (locationQuery.trim().length < 3) {
@@ -638,59 +636,50 @@ export default function GoldenHourCalculator() {
     if (lat === null || lng === null) return;
     let cancelled = false;
 
+    // Window spans the next 4 sunrises + 4 sunsets; moon/celestial events
+    // are pulled in up through that same end point.
     const solar = getUpcomingSolarEvents(lat, lng);
-    const moon = getUpcomingMoonEvents(lat, lng);
-    const celestial = getUpcomingCelestialEvents();
+    const windowEnd =
+      solar.length > 0 ? solar[solar.length - 1].at : new Date(Date.now() + 48 * 60 * 60 * 1000);
+    const moon = getUpcomingMoonEvents(lat, lng, windowEnd);
+    const celestial = getUpcomingCelestialEvents(windowEnd);
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- pure computation, no fetch involved
     setCometNote(celestial.find((e) => e.category === "Comet") ?? null);
 
     const combined = buildUnifiedEvents(lat, lng, solar, moon, celestial);
     setUnifiedEvents(combined);
-    setEventReadings(combined.map(() => []));
     setFogAssessments(combined.map(() => null));
     setPointWeatherByEvent(combined.map(() => null));
 
     if (combined.length === 0) return;
     const targets = combined.map((e) => e.primaryTime);
 
-    const mapEvents = combined
-      .map((e, i) => ({ e, i }))
-      .filter(({ e }) => e.bearingDeg != null);
+    setWeatherLoading(true);
     Promise.allSettled(
-      mapEvents.map(({ e }) => {
-        const tip = destinationPoint(lat, lng, e.bearingDeg!, 20);
-        return Promise.all([fetchPointWeather(lat, lng, e.primaryTime), fetchPointWeather(tip.lat, tip.lng, e.primaryTime)]);
+      combined.map((e) => {
+        const pinPromise = fetchPointWeather(lat, lng, e.primaryTime);
+        if (e.bearingDeg == null) {
+          return pinPromise.then((pin) => ({ pin, tip: pin }));
+        }
+        const tip = destinationPoint(lat, lng, e.bearingDeg, 20);
+        return Promise.all([pinPromise, fetchPointWeather(tip.lat, tip.lng, e.primaryTime)]).then(
+          ([pin, tipReading]) => ({ pin, tip: tipReading })
+        );
       })
     ).then((results) => {
       if (cancelled) return;
-      const next: (PointWeatherPair | null)[] = combined.map(() => null);
-      results.forEach((r, idx) => {
-        if (r.status === "fulfilled") {
-          const [pin, tip] = r.value;
-          next[mapEvents[idx].i] = { pin, tip };
-        }
-      });
-      setPointWeatherByEvent(next);
+      setPointWeatherByEvent(results.map((r) => (r.status === "fulfilled" ? r.value : null)));
+      setWeatherLoading(false);
     });
 
-    setWeatherLoading(true);
-    // HRRR and Aviation sources are still available (see lib/hrrrSource.ts,
-    // lib/aviationSource.ts) but hidden for now -- Open-Meteo alone is
-    // considered good enough.
-    Promise.allSettled([fetchOpenMeteoReadings(lat, lng, targets), fetchFogAssessments(lat, lng, targets)]).then(
-      ([omResult, fogResult]) => {
-        if (cancelled) return;
-        const openMeteo =
-          omResult.status === "fulfilled" ? omResult.value : fallbackReadings(targets.length, describeFailure(omResult));
-
-        setEventReadings(
-          combined.map((_, i) => [{ source: "Open-Meteo" as SourceName, reading: openMeteo[i] }])
-        );
-        setFogAssessments(fogResult.status === "fulfilled" ? fogResult.value : targets.map(() => null));
-        setWeatherLoading(false);
-      }
-    );
+    fetchFogAssessments(lat, lng, targets)
+      .then((fog) => {
+        if (!cancelled) setFogAssessments(fog);
+      })
+      .catch(() => {
+        if (!cancelled) setFogAssessments(targets.map(() => null));
+      });
 
     return () => {
       cancelled = true;
@@ -700,112 +689,92 @@ export default function GoldenHourCalculator() {
   const days = groupByDay(unifiedEvents);
 
   return (
-    <div className="max-w-[1600px] w-full mx-auto">
-      {/* z-[9999]: Leaflet's tile panes use CSS transforms, which create
-          their own stacking context and can otherwise paint over a
-          low-z-index sticky ancestor despite normal DOM order. */}
-      <div className="sticky top-0 z-[9999] bg-white border-b border-gray-200 shadow-lg shadow-black/10 py-6 mb-8">
-        <div className="max-w-4xl mx-auto w-full px-4">
-          <div className="flex items-center gap-2 mb-5">
-            <ApertureIcon className="w-5 h-5 text-amber-500" />
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">
-              Plan Your Shoot
-            </span>
-          </div>
+    <div className="max-w-[1040px] w-full mx-auto">
+      <div className="flex items-center justify-between gap-4 flex-wrap border-b border-gray-200 pb-3.5 mb-8">
+        <div className="flex items-center gap-2">
+          <ApertureIcon className="w-5 h-5 text-indigo-500" />
+          <span className={`${SERIF} font-semibold text-[17px] text-gray-900`}>Brooksl</span>
+          <span className="text-gray-300">·</span>
+          <span className="text-[12.5px] text-gray-400">Photo planning, next 4 sunrises & sunsets</span>
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-2">
-                <CalendarIcon className="w-4 h-4 text-gray-400" />
-                Date
-              </label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-gray-50 text-gray-900 rounded-lg px-4 py-2.5 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition-shadow"
-              />
-            </div>
+        <div className="flex items-center gap-2.5">
+          <label className="flex items-center gap-1.5 border border-gray-200 rounded-full pl-3.5 pr-3 py-1.5 text-[13px] font-medium text-gray-700">
+            <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="bg-transparent outline-none w-[108px] [color-scheme:light]"
+            />
+          </label>
 
-            <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-2">
-                <PinIcon className="w-4 h-4 text-gray-400" />
-                Location
-              </label>
-              <div className="space-y-2">
+          <div className="w-px h-5 bg-gray-200" />
+
+          <div className="relative" ref={locationPopoverRef}>
+            <button
+              onClick={() => setLocationOpen((v) => !v)}
+              className="flex items-center gap-1.5 border border-indigo-200 bg-indigo-50 rounded-full pl-3 pr-2.5 py-1.5 text-[13px] font-medium text-indigo-700"
+            >
+              <PinIcon className="w-3.5 h-3.5 text-indigo-500" />
+              {loading ? "Detecting…" : (cityState ?? "Set location")}
+              <ChevronDownIcon className="w-2.5 h-2.5 text-indigo-300" />
+            </button>
+
+            {locationOpen && (
+              <div className="absolute right-0 top-[calc(100%+8px)] w-80 bg-white border border-gray-200 rounded-xl shadow-xl p-2.5 z-30">
                 <button
                   onClick={detectLocation}
                   disabled={loading}
-                  className="w-full py-2.5 px-4 bg-gray-900 hover:bg-gray-800 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg px-3 py-2 text-xs font-semibold mb-2 disabled:opacity-50"
                 >
-                  {loading ? "Detecting…" : "Use Device Location"}
+                  <DeviceLocationIcon className="w-3.5 h-3.5" />
+                  {loading ? "Detecting…" : "Use device location"}
                 </button>
 
-                <p className="text-xs text-gray-400 text-center">or enter a camera location</p>
-
-                <div className="relative">
+                <div className="flex items-center gap-2 border-2 border-indigo-500 rounded-lg px-2.5 py-2 shadow-[0_0_0_3px_rgba(99,102,241,0.12)] mb-1.5">
+                  <SearchIcon className="w-3.5 h-3.5 text-gray-400" />
                   <input
                     type="text"
+                    autoFocus
                     placeholder="City, state, zip, or address"
                     value={locationQuery}
                     onChange={(e) => setLocationQuery(e.target.value)}
-                    className="w-full bg-gray-50 text-gray-900 rounded-lg px-3 py-2.5 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 text-sm transition-shadow"
+                    className="flex-1 text-xs outline-none text-gray-900"
                   />
-                  {searching && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">…</span>
-                  )}
-                  {suggestions.length > 0 && (
-                    <ul className="absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-lg max-h-64 overflow-y-auto shadow-xl">
-                      {suggestions.map((s, i) => (
-                        <li key={i}>
-                          <button
-                            onClick={() => selectSuggestion(s)}
-                            className="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm text-gray-700"
-                          >
-                            {s.label}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  {searching && <span className="text-[10px] text-gray-400">…</span>}
                 </div>
 
-                {geoError && <p className="text-red-600 text-sm">{geoError}</p>}
-                {cityState && (
-                  <p className="text-gray-500 text-xs flex items-center gap-1">
-                    <PinIcon className="w-3 h-3 text-amber-500" />
-                    {cityState}
-                  </p>
-                )}
+                {suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => selectSuggestion(s)}
+                    className="w-full text-left px-2 py-1.5 rounded-md hover:bg-indigo-50 text-xs text-gray-600 flex items-center gap-1.5"
+                  >
+                    <PinIcon className="w-3 h-3 text-gray-300 flex-shrink-0" />
+                    {s.label}
+                  </button>
+                ))}
+
+                {geoError && <p className="text-red-600 text-[11px] mt-1.5 px-1">{geoError}</p>}
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
 
       {lat === null && lng === null && !loading && (
-        <p className="text-gray-600 text-sm text-center pt-4">
-          Set a location above to see upcoming events.
-        </p>
+        <p className="text-gray-400 text-sm text-center pt-4">Set a location above to see upcoming events.</p>
       )}
 
       {lat !== null && lng !== null && (
-        <div className="space-y-6">
-          <div>
-            <h2 className="text-gray-400 text-sm uppercase tracking-widest">Next 48 Hours</h2>
-            <p className="text-xs text-gray-600 mt-1">
-              Each event is cross-checked from 3 independent weather sources. &quot;Not
-              available&quot; means that source doesn&apos;t provide that data point --
-              never guessed.
-            </p>
-          </div>
-          {weatherLoading && <p className="text-gray-600 text-sm">Loading forecasts from 3 sources…</p>}
+        <div className="space-y-8">
+          {weatherLoading && <p className="text-gray-400 text-sm">Loading forecasts…</p>}
           {days.map((day) => (
             <DayRow
               key={day.key}
               label={day.label}
               items={day.items}
-              eventReadings={eventReadings}
               fogAssessments={fogAssessments}
               pointWeatherByEvent={pointWeatherByEvent}
               pinLat={lat}
@@ -814,14 +783,14 @@ export default function GoldenHourCalculator() {
             />
           ))}
           {cometNote && (
-            <div className="py-3 px-4 rounded-lg bg-gray-900 border border-gray-800">
-              <span className="font-medium text-gray-400">Comets: {cometNote.title}</span>
-              <p className="text-xs text-gray-500 mt-1">{cometNote.detail}</p>
+            <div className="py-3 px-4 rounded-lg bg-gray-50 border border-gray-100">
+              <span className="font-semibold text-gray-600 text-sm">Comets: {cometNote.title}</span>
+              <p className="text-xs text-gray-400 mt-1">{cometNote.detail}</p>
               <a
                 href={cometNote.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-amber-400 hover:text-amber-300 text-xs"
+                className="text-indigo-600 hover:text-indigo-700 text-xs font-semibold"
               >
                 Check manually
               </a>

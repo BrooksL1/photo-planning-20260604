@@ -18,7 +18,7 @@ const pinIcon = L.icon({
 function arrowheadIcon(bearingDeg: number) {
   return L.divIcon({
     className: "",
-    html: `<div style="transform: rotate(${bearingDeg}deg); width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 16px solid #f59e0b;"></div>`,
+    html: `<div style="transform: rotate(${bearingDeg}deg); width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 16px solid #6366f1;"></div>`,
     iconSize: [14, 16],
     iconAnchor: [7, 8],
   });
@@ -57,12 +57,11 @@ export default function EventMap({
       center={[pinLat, pinLng]}
       zoom={11}
       scrollWheelZoom={false}
-      style={{ height: 220, width: "100%" }}
+      style={{ height: 150, width: "100%" }}
     >
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        className="map-tiles-dark"
       />
       <FitToBounds bounds={bounds} />
       <Marker
@@ -81,7 +80,7 @@ export default function EventMap({
           [pinLat, pinLng],
           [tip.lat, tip.lng],
         ]}
-        pathOptions={{ color: "#f59e0b", weight: 3 }}
+        pathOptions={{ color: "#6366f1", weight: 3 }}
       />
       <Marker position={[tip.lat, tip.lng]} icon={arrowheadIcon(bearingDeg)} />
     </MapContainer>
