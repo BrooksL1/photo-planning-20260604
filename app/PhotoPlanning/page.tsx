@@ -8,8 +8,8 @@ export const metadata = {
 
 export default function PhotoPlanningPage() {
   return (
-    <main className="min-h-screen bg-gray-950 text-white px-4 py-12">
-      <div className="max-w-3xl mx-auto">
+    <main className="min-h-screen bg-gray-950 text-white px-4 sm:px-8 py-12">
+      <div className="max-w-[1600px] mx-auto">
         <Link href="/" className="text-gray-500 hover:text-gray-300 text-sm mb-8 inline-block transition-colors">
           ← brooksl.com
         </Link>

@@ -10,7 +10,7 @@ export type SourceReading = {
   note?: string;
 };
 
-export type SourceName = "Open-Meteo" | "NOAA/NWS" | "Aviation METAR/TAF";
+export type SourceName = "Open-Meteo" | "HRRR (NOAA)" | "Aviation METAR/TAF";
 
 export type SolarEventKind = "Sunrise" | "Sunset";
 
