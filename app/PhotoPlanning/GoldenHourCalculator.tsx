@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import SunCalc from "suncalc";
 import type { SolarEvent, MoonEvent, CelestialEvent, SourceReading, SourceName } from "./lib/types";
 import { getUpcomingSolarEvents } from "./lib/solarEvents";
 import { getUpcomingMoonEvents } from "./lib/moonEvents";
@@ -11,33 +10,21 @@ import { fetchNwsReadings } from "./lib/nwsSource";
 import { fetchAviationReadings } from "./lib/aviationSource";
 import { fetchFogAssessments, type FogAssessment, type FogLikelihood } from "./lib/fogPredictor";
 
-type SunTimes = {
-  goldenHourMorningStart: Date;
-  goldenHourMorningEnd: Date;
-  blueHourMorningStart: Date;
-  blueHourMorningEnd: Date;
-  sunrise: Date;
-  solarNoon: Date;
-  sunset: Date;
-  goldenHourEveningStart: Date;
-  goldenHourEveningEnd: Date;
-  blueHourEveningStart: Date;
-  blueHourEveningEnd: Date;
-};
-
 type EventReading = { source: SourceName; reading: SourceReading };
-type SolarEventWithReadings = { event: SolarEvent; readings: EventReading[] };
+
+type UnifiedEventKind = "Sunrise" | "Sunset" | "Moonrise" | "Moonset" | "Eclipse" | "Meteor Shower";
+
+type UnifiedEvent = {
+  id: string;
+  kind: UnifiedEventKind;
+  primaryTime: Date;
+  headerLabel: string;
+  detailLine: string;
+  celestialLink?: { url: string; label: string };
+};
 
 function fmt(date: Date): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function fmtRange(start: Date, end: Date): string {
-  return `${fmt(start)} – ${fmt(end)}`;
-}
-
-function fmtDayTime(date: Date): string {
-  return date.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 function fmtPercent(v: number | null): string {
@@ -49,21 +36,11 @@ function fmtMiles(v: number | null): string {
   return `${v >= 10 ? Math.round(v) : v.toFixed(1)} mi`;
 }
 
-function calcTimes(lat: number, lng: number, date: Date): SunTimes {
-  const t = SunCalc.getTimes(date, lat, lng);
-  return {
-    blueHourMorningStart: t.nauticalDawn,
-    blueHourMorningEnd: t.dawn,
-    goldenHourMorningStart: t.dawn,
-    goldenHourMorningEnd: t.goldenHourEnd,
-    sunrise: t.sunrise,
-    solarNoon: t.solarNoon,
-    sunset: t.sunset,
-    goldenHourEveningStart: t.goldenHour,
-    goldenHourEveningEnd: t.dusk,
-    blueHourEveningStart: t.dusk,
-    blueHourEveningEnd: t.nauticalDusk,
-  };
+function todayLocalISO(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
 function fallbackReadings(count: number, reason: string): SourceReading[] {
@@ -101,18 +78,73 @@ async function fetchCityState(lat: number, lng: number): Promise<string | null> 
   return label || null;
 }
 
-type TimeRowProps = { label: string; value: string; color: string; note?: string };
+// Merges sun/moon/celestial events into one common shape so they can all be
+// laid out the same way: grouped by calendar day, one tile per event, each
+// tile carrying the same 3-source weather + fog data. Comets are excluded
+// (no specific date/time -- see the standing disclaimer rendered separately).
+function buildUnifiedEvents(
+  solarEvents: SolarEvent[],
+  moonEvents: MoonEvent[],
+  celestialEvents: CelestialEvent[]
+): UnifiedEvent[] {
+  const events: UnifiedEvent[] = [];
 
-function TimeRow({ label, value, color, note }: TimeRowProps) {
-  return (
-    <div className={`flex items-center justify-between py-3 px-4 rounded-lg ${color}`}>
-      <div>
-        <span className="font-medium text-white">{label}</span>
-        {note && <span className="ml-2 text-xs text-white/60">{note}</span>}
-      </div>
-      <span className="text-white font-mono text-sm">{value}</span>
-    </div>
-  );
+  solarEvents.forEach((e, i) => {
+    events.push({
+      id: `solar-${i}`,
+      kind: e.kind,
+      primaryTime: e.at,
+      headerLabel: `${e.kind} – ${fmt(e.at)}`,
+      detailLine: e.boundaryTimes.map((b) => `${b.label} ${fmt(b.date)}`).join(" · "),
+    });
+  });
+
+  moonEvents.forEach((e, i) => {
+    const primaryTime = e.kind === "Moonrise" ? e.times[0].date : e.times[1].date;
+    events.push({
+      id: `moon-${i}`,
+      kind: e.kind,
+      primaryTime,
+      headerLabel: `${e.kind} – ${fmt(primaryTime)}`,
+      detailLine: e.times.map((t) => `${t.label} ${fmt(t.date)}`).join(" · "),
+    });
+  });
+
+  celestialEvents.forEach((e, i) => {
+    if (e.category === "Comet" || !e.date) return;
+    events.push({
+      id: `celestial-${i}`,
+      kind: e.category === "Eclipse" ? "Eclipse" : "Meteor Shower",
+      primaryTime: e.date,
+      headerLabel: `${e.title} – ${fmt(e.date)}`,
+      detailLine: e.detail,
+      celestialLink: { url: e.sourceUrl, label: "Verify source" },
+    });
+  });
+
+  return events.sort((a, b) => a.primaryTime.getTime() - b.primaryTime.getTime());
+}
+
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function dayLabel(d: Date): string {
+  return d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+}
+
+type IndexedEvent = { event: UnifiedEvent; index: number };
+
+function groupByDay(events: UnifiedEvent[]): { key: string; label: string; items: IndexedEvent[] }[] {
+  const map = new Map<string, IndexedEvent[]>();
+  events.forEach((event, index) => {
+    const key = dayKey(event.primaryTime);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push({ event, index });
+  });
+  return Array.from(map.entries())
+    .map(([key, items]) => ({ key, label: dayLabel(items[0].event.primaryTime), items }))
+    .sort((a, b) => a.items[0].event.primaryTime.getTime() - b.items[0].event.primaryTime.getTime());
 }
 
 const FOG_BADGE_COLORS: Record<FogLikelihood, string> = {
@@ -181,60 +213,66 @@ function FogBadge({ fog }: { fog: FogAssessment | null }) {
   );
 }
 
-function WeatherAuditTable({
-  items,
-  fogs,
+function EventTile({
+  event,
+  readings,
+  fog,
 }: {
-  items: SolarEventWithReadings[];
-  fogs: (FogAssessment | null)[];
+  event: UnifiedEvent;
+  readings: EventReading[];
+  fog: FogAssessment | null;
 }) {
   return (
-    <div className="space-y-4">
-      {items.map(({ event, readings }, i) => (
-        <div
-          key={`${event.kind}-${event.at.toISOString()}-${i}`}
-          className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden"
-        >
-          <div className="px-4 py-3 bg-gray-800/60">
-            <span className="font-semibold text-white">{event.kind}</span>
-            <div className="text-xs text-gray-400 mt-0.5">
-              {event.boundaryTimes.map((b, j) => (
-                <span key={b.label}>
-                  {j > 0 && " · "}
-                  {b.label} {fmt(b.date)}
-                </span>
-              ))}
-            </div>
-            <FogBadge fog={fogs[i] ?? null} />
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-separate border-spacing-0 min-w-[560px]">
-              <thead>
-                <tr className="text-gray-500 text-xs uppercase tracking-wide">
-                  <th className="text-left font-normal py-2 px-3">Source</th>
-                  <th className="text-right font-normal py-2 px-3">Low</th>
-                  <th className="text-right font-normal py-2 px-3">Mid</th>
-                  <th className="text-right font-normal py-2 px-3">High</th>
-                  <th className="text-right font-normal py-2 px-3">Visibility</th>
-                  <th className="text-right font-normal py-2 px-3">Precip</th>
-                  <th className="text-right font-normal py-2 px-3">Verify</th>
-                </tr>
-              </thead>
-              <tbody>
-                {readings.map(({ source, reading }) => (
+    <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden flex-1 min-w-[320px]">
+      <div className="px-4 py-3 bg-gray-800/60">
+        <div className="text-lg font-bold text-white">{event.headerLabel}</div>
+        <div className="text-xs text-gray-400 mt-1">{event.detailLine}</div>
+        {event.celestialLink && (
+          <a
+            href={event.celestialLink.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-amber-400 hover:text-amber-300 text-xs mt-1 inline-block"
+          >
+            {event.celestialLink.label}
+          </a>
+        )}
+        {readings.length > 0 && <FogBadge fog={fog} />}
+      </div>
+      {readings.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-separate border-spacing-0 min-w-[560px]">
+            <thead>
+              <tr className="text-gray-500 text-xs uppercase tracking-wide">
+                <th className="text-left font-normal py-2 px-3">Source</th>
+                <th className="text-right font-normal py-2 px-3">Low</th>
+                <th className="text-right font-normal py-2 px-3">Mid</th>
+                <th className="text-right font-normal py-2 px-3">High</th>
+                <th className="text-right font-normal py-2 px-3">Visibility</th>
+                <th className="text-right font-normal py-2 px-3">Precip</th>
+                <th className="text-right font-normal py-2 px-3">Verify</th>
+              </tr>
+            </thead>
+            <tbody>
+              {readings.map(({ source, reading }) => {
+                // NWS structurally never splits cloud cover by altitude --
+                // "--" (not applicable) rather than "Not available" (which
+                // implies a gap in an otherwise-expected data point).
+                const cloudsApplicable = source !== "NOAA/NWS";
+                return (
                   <tr key={source} className="border-t border-gray-800">
                     <td className="py-2 px-3 text-white align-top">
                       {source}
                       {reading.note && <div className="text-xs text-gray-500 mt-0.5">{reading.note}</div>}
                     </td>
                     <td className="py-2 px-3 text-right font-mono text-gray-200 align-top">
-                      {fmtPercent(reading.cloudLow)}
+                      {cloudsApplicable ? fmtPercent(reading.cloudLow) : "—"}
                     </td>
                     <td className="py-2 px-3 text-right font-mono text-gray-200 align-top">
-                      {fmtPercent(reading.cloudMid)}
+                      {cloudsApplicable ? fmtPercent(reading.cloudMid) : "—"}
                     </td>
                     <td className="py-2 px-3 text-right font-mono text-gray-200 align-top">
-                      {fmtPercent(reading.cloudHigh)}
+                      {cloudsApplicable ? fmtPercent(reading.cloudHigh) : "—"}
                     </td>
                     <td className="py-2 px-3 text-right font-mono text-gray-200 align-top">
                       {fmtMiles(reading.visibilityMiles)}
@@ -257,77 +295,10 @@ function WeatherAuditTable({
                       )}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function MoonSection({ events }: { events: MoonEvent[] }) {
-  if (events.length === 0) {
-    return <p className="text-gray-600 text-sm">No nighttime moonrise/moonset in this window.</p>;
-  }
-  return (
-    <div className="space-y-2">
-      {events.map((event, i) => (
-        <div
-          key={`${event.kind}-${i}`}
-          className="flex items-center justify-between py-3 px-4 rounded-lg bg-gray-800"
-        >
-          <span className="font-medium text-white">{event.kind}</span>
-          <span className="text-white font-mono text-sm">
-            {event.times.map((t, j) => (
-              <span key={t.label}>
-                {j > 0 && " · "}
-                {t.label} {fmt(t.date)}
-              </span>
-            ))}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function CelestialSection({ events }: { events: CelestialEvent[] }) {
-  const notable = events.filter((e) => e.category !== "Comet");
-  const comet = events.find((e) => e.category === "Comet");
-  return (
-    <div className="space-y-2">
-      {notable.length === 0 && <p className="text-gray-600 text-sm">None expected.</p>}
-      {notable.map((event, i) => (
-        <div key={`${event.title}-${i}`} className="py-3 px-4 rounded-lg bg-gray-800">
-          <div className="flex items-center justify-between">
-            <span className="font-medium text-white">{event.title}</span>
-            {event.date && <span className="text-white font-mono text-sm">{fmtDayTime(event.date)}</span>}
-          </div>
-          <p className="text-xs text-gray-400 mt-1">{event.detail}</p>
-          <a
-            href={event.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-amber-400 hover:text-amber-300 text-xs"
-          >
-            Verify source
-          </a>
-        </div>
-      ))}
-      {comet && (
-        <div className="py-3 px-4 rounded-lg bg-gray-900 border border-gray-800">
-          <span className="font-medium text-gray-400">Comets: {comet.title}</span>
-          <p className="text-xs text-gray-500 mt-1">{comet.detail}</p>
-          <a
-            href={comet.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-amber-400 hover:text-amber-300 text-xs"
-          >
-            Check manually
-          </a>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -335,7 +306,7 @@ function CelestialSection({ events }: { events: CelestialEvent[] }) {
 }
 
 export default function GoldenHourCalculator() {
-  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(() => todayLocalISO());
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [locationLabel, setLocationLabel] = useState<string>("");
@@ -344,13 +315,12 @@ export default function GoldenHourCalculator() {
   const [manualLng, setManualLng] = useState("");
   const [geoError, setGeoError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [times, setTimes] = useState<SunTimes | null>(null);
 
-  const [solarEventReadings, setSolarEventReadings] = useState<SolarEventWithReadings[]>([]);
-  const [weatherLoading, setWeatherLoading] = useState(false);
-  const [moonEvents, setMoonEvents] = useState<MoonEvent[]>([]);
-  const [celestialEvents, setCelestialEvents] = useState<CelestialEvent[]>([]);
+  const [unifiedEvents, setUnifiedEvents] = useState<UnifiedEvent[]>([]);
+  const [eventReadings, setEventReadings] = useState<EventReading[][]>([]);
   const [fogAssessments, setFogAssessments] = useState<(FogAssessment | null)[]>([]);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [cometNote, setCometNote] = useState<CelestialEvent | null>(null);
 
   function detectLocation() {
     if (!navigator.geolocation) {
@@ -383,13 +353,6 @@ export default function GoldenHourCalculator() {
   }, []);
 
   useEffect(() => {
-    if (lat !== null && lng !== null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- deriving sun times from lat/lng/date
-      setTimes(calcTimes(lat, lng, new Date(date + "T12:00:00")));
-    }
-  }, [lat, lng, date]);
-
-  useEffect(() => {
     if (lat === null || lng === null) return;
     let cancelled = false;
 
@@ -408,14 +371,20 @@ export default function GoldenHourCalculator() {
     if (lat === null || lng === null) return;
     let cancelled = false;
 
-    const events = getUpcomingSolarEvents(lat, lng);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- seed rows before weather data arrives
-    setSolarEventReadings(events.map((event) => ({ event, readings: [] })));
-    setMoonEvents(getUpcomingMoonEvents(lat, lng));
-    setCelestialEvents(getUpcomingCelestialEvents());
+    const solar = getUpcomingSolarEvents(lat, lng);
+    const moon = getUpcomingMoonEvents(lat, lng);
+    const celestial = getUpcomingCelestialEvents();
 
-    if (events.length === 0) return;
-    const targets = events.map((e) => e.at);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pure computation, no fetch involved
+    setCometNote(celestial.find((e) => e.category === "Comet") ?? null);
+
+    const combined = buildUnifiedEvents(solar, moon, celestial);
+    setUnifiedEvents(combined);
+    setEventReadings(combined.map(() => []));
+    setFogAssessments(combined.map(() => null));
+
+    if (combined.length === 0) return;
+    const targets = combined.map((e) => e.primaryTime);
 
     setWeatherLoading(true);
     Promise.allSettled([
@@ -432,15 +401,12 @@ export default function GoldenHourCalculator() {
       const aviation =
         avResult.status === "fulfilled" ? avResult.value : fallbackReadings(targets.length, describeFailure(avResult));
 
-      setSolarEventReadings(
-        events.map((event, i) => ({
-          event,
-          readings: [
-            { source: "Open-Meteo" as SourceName, reading: openMeteo[i] },
-            { source: "NOAA/NWS" as SourceName, reading: nws[i] },
-            { source: "Aviation METAR/TAF" as SourceName, reading: aviation[i] },
-          ],
-        }))
+      setEventReadings(
+        combined.map((_, i) => [
+          { source: "Open-Meteo" as SourceName, reading: openMeteo[i] },
+          { source: "NOAA/NWS" as SourceName, reading: nws[i] },
+          { source: "Aviation METAR/TAF" as SourceName, reading: aviation[i] },
+        ])
       );
       setFogAssessments(fogResult.status === "fulfilled" ? fogResult.value : targets.map(() => null));
       setWeatherLoading(false);
@@ -464,8 +430,10 @@ export default function GoldenHourCalculator() {
     setLocationLabel(`${la.toFixed(4)}°, ${lo.toFixed(4)}°`);
   }
 
+  const days = groupByDay(unifiedEvents);
+
   return (
-    <div className="max-w-3xl w-full mx-auto space-y-8">
+    <div className="max-w-6xl w-full mx-auto space-y-8">
       <div className="max-w-md mx-auto w-full space-y-6">
         {/* Date */}
         <div>
@@ -520,83 +488,53 @@ export default function GoldenHourCalculator() {
           )}
         </div>
 
-        {/* Results */}
-        {times && (
-          <div className="space-y-2">
-            <h2 className="text-gray-400 text-sm uppercase tracking-widest mb-3">Morning</h2>
-            <TimeRow
-              label="Blue Hour"
-              value={fmtRange(times.blueHourMorningStart, times.blueHourMorningEnd)}
-              color="bg-blue-900/60"
-              note="pre-dawn"
-            />
-            <TimeRow
-              label="Golden Hour"
-              value={fmtRange(times.goldenHourMorningStart, times.goldenHourMorningEnd)}
-              color="bg-amber-800/60"
-            />
-            <TimeRow label="Sunrise" value={fmt(times.sunrise)} color="bg-orange-900/40" />
-
-            <h2 className="text-gray-400 text-sm uppercase tracking-widest mb-3 mt-5">Midday</h2>
-            <TimeRow
-              label="Solar Noon"
-              value={fmt(times.solarNoon)}
-              color="bg-gray-800"
-              note="harsh light"
-            />
-
-            <h2 className="text-gray-400 text-sm uppercase tracking-widest mb-3 mt-5">Evening</h2>
-            <TimeRow label="Sunset" value={fmt(times.sunset)} color="bg-orange-900/40" />
-            <TimeRow
-              label="Golden Hour"
-              value={fmtRange(times.goldenHourEveningStart, times.goldenHourEveningEnd)}
-              color="bg-amber-800/60"
-            />
-            <TimeRow
-              label="Blue Hour"
-              value={fmtRange(times.blueHourEveningStart, times.blueHourEveningEnd)}
-              color="bg-blue-900/60"
-              note="post-sunset"
-            />
-          </div>
-        )}
-
-        {!times && !loading && (
+        {!lat && !lng && !loading && (
           <p className="text-gray-600 text-sm text-center pt-4">
-            Set a location above to see your golden hour times.
+            Set a location above to see upcoming events.
           </p>
         )}
       </div>
 
       {lat !== null && lng !== null && (
-        <div className="space-y-3">
-          <h2 className="text-gray-400 text-sm uppercase tracking-widest">
-            Weather Audit — Next 48 Hours (Sunrise/Sunset)
-          </h2>
-          <p className="text-xs text-gray-600">
-            Cross-checked from 3 independent sources. &quot;Not available&quot; means that
-            source doesn&apos;t provide that data point -- never guessed.
-          </p>
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-gray-400 text-sm uppercase tracking-widest">Next 48 Hours</h2>
+            <p className="text-xs text-gray-600 mt-1">
+              Each event is cross-checked from 3 independent weather sources. &quot;Not
+              available&quot; means that source doesn&apos;t provide that data point --
+              never guessed.
+            </p>
+          </div>
           {weatherLoading && <p className="text-gray-600 text-sm">Loading forecasts from 3 sources…</p>}
-          <WeatherAuditTable items={solarEventReadings} fogs={fogAssessments} />
-        </div>
-      )}
-
-      {lat !== null && lng !== null && (
-        <div className="space-y-3">
-          <h2 className="text-gray-400 text-sm uppercase tracking-widest">
-            Moonrise & Moonset — Next 48 Hours (Nighttime)
-          </h2>
-          <MoonSection events={moonEvents} />
-        </div>
-      )}
-
-      {lat !== null && lng !== null && (
-        <div className="space-y-3">
-          <h2 className="text-gray-400 text-sm uppercase tracking-widest">
-            Celestial Events — Next 48 Hours
-          </h2>
-          <CelestialSection events={celestialEvents} />
+          {days.map((day) => (
+            <div key={day.key} className="space-y-3">
+              <h3 className="text-white font-semibold text-lg">{day.label}</h3>
+              <div className="flex flex-wrap gap-4">
+                {day.items.map(({ event, index }) => (
+                  <EventTile
+                    key={event.id}
+                    event={event}
+                    readings={eventReadings[index] ?? []}
+                    fog={fogAssessments[index] ?? null}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+          {cometNote && (
+            <div className="py-3 px-4 rounded-lg bg-gray-900 border border-gray-800">
+              <span className="font-medium text-gray-400">Comets: {cometNote.title}</span>
+              <p className="text-xs text-gray-500 mt-1">{cometNote.detail}</p>
+              <a
+                href={cometNote.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-amber-400 hover:text-amber-300 text-xs"
+              >
+                Check manually
+              </a>
+            </div>
+          )}
         </div>
       )}
     </div>
