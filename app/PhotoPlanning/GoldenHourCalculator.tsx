@@ -316,7 +316,23 @@ function dayLabel(d: Date, timeZone: string): string {
 
 type IndexedEvent = { event: UnifiedEvent; index: number };
 
-function groupByDay(events: UnifiedEvent[], timeZone: string): { key: string; label: string; items: IndexedEvent[] }[] {
+// "Today" / "Tomorrow" / "In 3 days" / "2 days ago", against the real
+// current date at the location (not the picker time), so it always answers
+// "how far is this from now?".
+function relativeDayLabel(d: Date, timeZone: string): string {
+  const a = zonedParts(d, timeZone);
+  const b = zonedParts(new Date(), timeZone);
+  const diff = Math.round((Date.UTC(a.year, a.month - 1, a.day) - Date.UTC(b.year, b.month - 1, b.day)) / 86400000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff === -1) return "Yesterday";
+  return diff > 0 ? `In ${diff} days` : `${-diff} days ago`;
+}
+
+function groupByDay(
+  events: UnifiedEvent[],
+  timeZone: string
+): { key: string; label: string; relative: string; items: IndexedEvent[] }[] {
   const map = new Map<string, IndexedEvent[]>();
   events.forEach((event, index) => {
     const key = dayKey(event.primaryTime, timeZone);
@@ -324,7 +340,12 @@ function groupByDay(events: UnifiedEvent[], timeZone: string): { key: string; la
     map.get(key)!.push({ event, index });
   });
   return Array.from(map.entries())
-    .map(([key, items]) => ({ key, label: dayLabel(items[0].event.primaryTime, timeZone), items }))
+    .map(([key, items]) => ({
+      key,
+      label: dayLabel(items[0].event.primaryTime, timeZone),
+      relative: relativeDayLabel(items[0].event.primaryTime, timeZone),
+      items,
+    }))
     .sort((a, b) => a.items[0].event.primaryTime.getTime() - b.items[0].event.primaryTime.getTime());
 }
 
@@ -747,6 +768,7 @@ function EventTile({
 
 function DayRow({
   label,
+  relative,
   items,
   fogAssessments,
   pointWeatherByEvent,
@@ -759,6 +781,7 @@ function DayRow({
   showDivider,
 }: {
   label: string;
+  relative: string;
   items: IndexedEvent[];
   fogAssessments: (FogAssessment | null)[];
   pointWeatherByEvent: (PointWeatherPair | null)[];
@@ -788,11 +811,12 @@ function DayRow({
   );
 
   return (
-    <div className={`space-y-4 ${showDivider ? "pt-8 border-t border-gray-200" : ""}`}>
-      <h3
-        className={`${SERIF} text-2xl sm:text-3xl font-extrabold text-gray-900 text-center text-balance flex items-center gap-4 before:content-[''] before:flex-1 before:h-px before:bg-gray-200 after:content-[''] after:flex-1 after:h-px after:bg-gray-200`}
-      >
-        <span>{label}</span>
+    <div className={`space-y-5 ${showDivider ? "pt-12" : ""}`}>
+      {/* Solid band that sticks to the top while scrolling this day's tiles,
+          so it's always clear which day you're in. Full-bleed on phones. */}
+      <h3 className="sticky top-0 z-20 -mx-4 sm:mx-0 px-4 py-3 sm:rounded-xl bg-indigo-600 text-white text-center shadow-md shadow-indigo-600/20">
+        <span className="block text-[11px] font-semibold uppercase tracking-[0.22em] text-indigo-200">{relative}</span>
+        <span className={`${SERIF} block text-3xl sm:text-4xl font-extrabold leading-tight text-balance`}>{label}</span>
       </h3>
       {useSlider ? (
         // Phones stack every tile vertically; the sideways slider only kicks
@@ -1163,6 +1187,7 @@ export default function GoldenHourCalculator() {
             <DayRow
               key={day.key}
               label={day.label}
+              relative={day.relative}
               items={day.items}
               fogAssessments={fogAssessments}
               pointWeatherByEvent={pointWeatherByEvent}
