@@ -7,13 +7,18 @@ import { useId } from "react";
 // exactly the layer that blocks the view in real life.
 
 export type SkySceneProps = {
-  body: "sun" | "moon";
+  // "meteor"/"eclipse" draw a plain night sky with the event's glyph, so
+  // celestial tiles keep the same image block as sun/moon tiles.
+  body: "sun" | "moon" | "meteor" | "eclipse";
   rising: boolean;
   // 0-1 illuminated fraction, plus the on-screen rotation (degrees clockwise)
   // that turns the bright limb from "straight up" to where it really points.
   moon?: { fraction: number; rotationDeg: number };
   clouds: { low: number | null; mid: number | null; high: number | null } | null;
   cloudsLoading: boolean;
+  // Small pill overlaid top-left (e.g. "Just passed · 12 min ago"). Lives on
+  // the image so it never changes the tile's layout.
+  badge?: string;
 };
 
 const W = 360;
@@ -84,19 +89,38 @@ function Moon({ fraction, rotationDeg, glowId }: { fraction: number; rotationDeg
   );
 }
 
+function MeteorStreaks() {
+  return (
+    <g stroke="#ffffff" strokeLinecap="round">
+      <path d="M150 18 L112 44" strokeWidth={2} opacity={0.9} />
+      <path d="M196 26 L170 44" strokeWidth={1.4} opacity={0.7} />
+      <path d="M92 16 L76 27" strokeWidth={1.2} opacity={0.6} />
+    </g>
+  );
+}
+
+function EclipseDiscs() {
+  return (
+    <g>
+      <circle cx={BODY_X} cy={46} r={20} fill="#fff3c4" opacity={0.9} />
+      <circle cx={BODY_X + 11} cy={46} r={20} fill="#141c3d" stroke="#ffffff" strokeOpacity={0.25} />
+    </g>
+  );
+}
+
 function RiseSetArrow({ rising, color }: { rising: boolean; color: string }) {
   const x = BODY_X + 40;
   const d = rising ? `M ${x} 70 V 50 M ${x - 5} 55 L ${x} 50 L ${x + 5} 55` : `M ${x} 50 V 70 M ${x - 5} 65 L ${x} 70 L ${x + 5} 65`;
   return <path d={d} stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" fill="none" />;
 }
 
-export default function SkyScene({ body, rising, moon, clouds, cloudsLoading }: SkySceneProps) {
+export default function SkyScene({ body, rising, moon, clouds, cloudsLoading, badge }: SkySceneProps) {
   const uid = useId().replace(/:/g, "");
-  const palette = body === "moon" ? PALETTES.moon : rising ? PALETTES.sunrise : PALETTES.sunset;
+  const palette = body !== "sun" ? PALETTES.moon : rising ? PALETTES.sunrise : PALETTES.sunset;
   const skyId = `sky-${uid}`;
   const glowId = `glow-${uid}`;
   const diskId = `disk-${uid}`;
-  const dark = body === "moon";
+  const dark = body !== "sun";
 
   const layers: { key: "high" | "mid" | "low"; label: string; value: number | null; topPct: number }[] = [
     { key: "high", label: "High", value: clouds?.high ?? null, topPct: 20 },
@@ -140,11 +164,12 @@ export default function SkyScene({ body, rising, moon, clouds, cloudsLoading }: 
             [52, 58],
           ].map(([x, y], i) => <circle key={i} cx={x} cy={y} r={0.9} fill="#ffffff" opacity={0.7} />)}
 
-        {body === "sun" ? (
-          <Sun glowId={glowId} diskId={diskId} />
-        ) : (
+        {body === "sun" && <Sun glowId={glowId} diskId={diskId} />}
+        {body === "moon" && (
           <Moon fraction={moon?.fraction ?? 0.5} rotationDeg={moon?.rotationDeg ?? 0} glowId={glowId} />
         )}
+        {body === "meteor" && <MeteorStreaks />}
+        {body === "eclipse" && <EclipseDiscs />}
 
         {/* High: thin cirrus streaks */}
         <rect y={12} width={W} height={14} rx={7} fill={palette.high} opacity={veilOpacity(clouds?.high ?? null) * 0.6} />
@@ -177,8 +202,14 @@ export default function SkyScene({ body, rising, moon, clouds, cloudsLoading }: 
           </g>
         ))}
 
-        <RiseSetArrow rising={rising} color={dark ? "#dfe4ff" : "#ffffff"} />
+        {(body === "sun" || body === "moon") && <RiseSetArrow rising={rising} color={dark ? "#dfe4ff" : "#ffffff"} />}
       </svg>
+
+      {badge && (
+        <span className="absolute left-2 top-2 text-[10px] leading-none font-semibold px-2 py-1 rounded-full whitespace-nowrap bg-gray-900/85 text-white">
+          {badge}
+        </span>
+      )}
 
       <div className="absolute right-2 inset-y-0">
         {layers.map((l) => (

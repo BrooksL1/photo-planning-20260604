@@ -40,16 +40,20 @@ export default function EventMap({
 }: {
   pinLat: number;
   pinLng: number;
-  bearingDeg: number;
+  // Omitted for events with no direction (meteor showers, eclipses): the
+  // map then just frames the pin, with no arrow.
+  bearingDeg?: number;
   onPinMove: (lat: number, lng: number) => void;
 }) {
-  const tip = destinationPoint(pinLat, pinLng, bearingDeg, 20);
-  const behind = destinationPoint(pinLat, pinLng, bearingDeg + 180, 10);
-  const beyond = destinationPoint(pinLat, pinLng, bearingDeg, 30);
+  const tip = bearingDeg != null ? destinationPoint(pinLat, pinLng, bearingDeg, 20) : null;
+  const corners =
+    bearingDeg != null
+      ? [destinationPoint(pinLat, pinLng, bearingDeg + 180, 10), destinationPoint(pinLat, pinLng, bearingDeg, 30)]
+      : [destinationPoint(pinLat, pinLng, 225, 14), destinationPoint(pinLat, pinLng, 45, 14)];
 
   const bounds: [[number, number], [number, number]] = [
-    [Math.min(behind.lat, beyond.lat), Math.min(behind.lng, beyond.lng)],
-    [Math.max(behind.lat, beyond.lat), Math.max(behind.lng, beyond.lng)],
+    [Math.min(corners[0].lat, corners[1].lat), Math.min(corners[0].lng, corners[1].lng)],
+    [Math.max(corners[0].lat, corners[1].lat), Math.max(corners[0].lng, corners[1].lng)],
   ];
 
   return (
@@ -75,14 +79,18 @@ export default function EventMap({
           },
         }}
       />
-      <Polyline
-        positions={[
-          [pinLat, pinLng],
-          [tip.lat, tip.lng],
-        ]}
-        pathOptions={{ color: "#6366f1", weight: 3 }}
-      />
-      <Marker position={[tip.lat, tip.lng]} icon={arrowheadIcon(bearingDeg)} />
+      {tip && bearingDeg != null && (
+        <>
+          <Polyline
+            positions={[
+              [pinLat, pinLng],
+              [tip.lat, tip.lng],
+            ]}
+            pathOptions={{ color: "#6366f1", weight: 3 }}
+          />
+          <Marker position={[tip.lat, tip.lng]} icon={arrowheadIcon(bearingDeg)} />
+        </>
+      )}
     </MapContainer>
   );
 }

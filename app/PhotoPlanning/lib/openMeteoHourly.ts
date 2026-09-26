@@ -26,23 +26,38 @@ export function isWithinForecastRange(target: Date, now: Date = new Date()): boo
 
 export type HourlyRow = Record<string, number | null>;
 
-export async function fetchHourlyAt(
-  lat: number,
-  lng: number,
+export type HourlyQuery = { lat: number; lng: number; target: Date };
+
+// One request for any number of (location, time) queries: Open-Meteo takes
+// comma-separated coordinates and returns one series per location, in order.
+// Batching matters -- a request per tile (~30 at once) trips Open-Meteo's
+// rate limit (HTTP 429) and leaves tiles without weather.
+export async function fetchHourlyAtPoints(
+  queries: HourlyQuery[],
   variables: string[],
-  targets: Date[],
   extraParams = ""
 ): Promise<(HourlyRow | null)[]> {
-  const inRange = targets.filter((t) => isWithinForecastRange(t));
-  if (inRange.length === 0) return targets.map(() => null);
+  const inRange = queries.filter((q) => isWithinForecastRange(q.target));
+  if (inRange.length === 0) return queries.map(() => null);
+
+  const locationKey = (q: HourlyQuery) => `${q.lat.toFixed(4)},${q.lng.toFixed(4)}`;
+  const locations: HourlyQuery[] = [];
+  const locationIndex = new Map<string, number>();
+  for (const q of inRange) {
+    if (!locationIndex.has(locationKey(q))) {
+      locationIndex.set(locationKey(q), locations.length);
+      locations.push(q);
+    }
+  }
 
   // Dates are UTC (timezone=GMT) and times are unix seconds, so parsing never
   // depends on the browser's or the location's time zone.
-  const minMs = Math.min(...inRange.map((t) => t.getTime()));
-  const maxMs = Math.max(...inRange.map((t) => t.getTime()));
+  const minMs = Math.min(...inRange.map((q) => q.target.getTime()));
+  const maxMs = Math.max(...inRange.map((q) => q.target.getTime()));
   const url =
     "https://api.open-meteo.com/v1/forecast" +
-    `?latitude=${lat}&longitude=${lng}` +
+    `?latitude=${locations.map((l) => l.lat.toFixed(4)).join(",")}` +
+    `&longitude=${locations.map((l) => l.lng.toFixed(4)).join(",")}` +
     `&hourly=${variables.join(",")}` +
     extraParams +
     `&start_date=${isoDate(new Date(minMs))}&end_date=${isoDate(new Date(maxMs))}` +
@@ -52,14 +67,19 @@ export async function fetchHourlyAt(
   if (!res.ok) {
     throw new Error(`Open-Meteo request failed (${res.status})`);
   }
-  const data = await res.json();
-  const times: number[] = data.hourly.time.map((s: number) => s * 1000);
+  const json = await res.json();
+  // A single location comes back as an object, several as an array.
+  const series: { hourly: Record<string, (number | null)[]> }[] = Array.isArray(json) ? json : [json];
 
-  return targets.map((target) => {
+  return queries.map((q) => {
+    const idx = locationIndex.get(locationKey(q));
+    if (idx == null || !isWithinForecastRange(q.target)) return null;
+    const hourly = series[idx].hourly;
+    const times = (hourly.time as number[]).map((sec) => sec * 1000);
     let bestIdx = -1;
     let bestDiff = Infinity;
     for (let i = 0; i < times.length; i++) {
-      const diff = Math.abs(times[i] - target.getTime());
+      const diff = Math.abs(times[i] - q.target.getTime());
       if (diff < bestDiff) {
         bestDiff = diff;
         bestIdx = i;
@@ -67,7 +87,22 @@ export async function fetchHourlyAt(
     }
     if (bestIdx === -1 || bestDiff > MAX_GAP_MS) return null;
     const row: HourlyRow = {};
-    for (const v of variables) row[v] = data.hourly[v]?.[bestIdx] ?? null;
+    for (const v of variables) row[v] = hourly[v]?.[bestIdx] ?? null;
     return row;
   });
+}
+
+// Single-location convenience wrapper over fetchHourlyAtPoints.
+export function fetchHourlyAt(
+  lat: number,
+  lng: number,
+  variables: string[],
+  targets: Date[],
+  extraParams = ""
+): Promise<(HourlyRow | null)[]> {
+  return fetchHourlyAtPoints(
+    targets.map((target) => ({ lat, lng, target })),
+    variables,
+    extraParams
+  );
 }

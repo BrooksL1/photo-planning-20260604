@@ -10,7 +10,7 @@ import { getUpcomingCelestialEvents } from "./lib/celestialEvents";
 import { fetchFogAssessments, type FogAssessment, type FogLikelihood } from "./lib/fogPredictor";
 import { searchPlaces, type PlaceSuggestion } from "./lib/geocode";
 import { destinationPoint, toCompassBearing } from "./lib/geo";
-import { fetchPointWeather, type PointReading } from "./lib/pointWeather";
+import { fetchPointWeatherBatch, type PointReading } from "./lib/pointWeather";
 import { isWithinForecastRange, FORECAST_FUTURE_LIMIT_DAYS } from "./lib/openMeteoHourly";
 import SkyScene from "./SkyScene";
 import {
@@ -640,33 +640,31 @@ function EventTile({
   timeZone: string;
   onPinMove: (lat: number, lng: number) => void;
 }) {
-  const hasMap = event.bearingDeg != null;
   const minutesAgo = Math.floor((referenceTime.getTime() - event.primaryTime.getTime()) / 60000);
   const justPassed = minutesAgo >= 0;
   const isSun = event.kind === "Sunrise" || event.kind === "Sunset";
   const isMoon = event.kind === "Moonrise" || event.kind === "Moonset";
   const potential = isMoon ? computeMoonPotential(pointWeather) : computePotential(pointWeather, fog);
+  const sceneBody = isSun ? "sun" : isMoon ? "moon" : event.kind === "Eclipse" ? "eclipse" : "meteor";
 
+  // Every section below has a fixed height and never wraps, so tiles side by
+  // side line up row-for-row no matter which event type, badge, or loading
+  // state they're in. Anything optional (e.g. "Just passed") is overlaid on
+  // the image instead of taking up layout space.
   return (
-    <div className={`border-t-[3px] ${justPassed ? "border-gray-300" : "border-indigo-500"} pt-4 h-full flex flex-col`}>
-      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
-        <div className="flex items-center gap-2 min-w-0">
-          <EventIcon kind={event.kind} />
-          <div className={`${SERIF} text-lg font-semibold text-gray-900 whitespace-nowrap`}>{event.headerLabel}</div>
-          {event.moonIlluminationPercent != null && (
-            <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
-              {event.moonIlluminationPercent}% illum.
-            </span>
-          )}
+    <div className={`border-t-[3px] ${justPassed ? "border-gray-300" : "border-indigo-500"} pt-4`}>
+      <div className="flex items-center gap-2 h-7 min-w-0">
+        <EventIcon kind={event.kind} />
+        <div className={`${SERIF} text-lg font-semibold text-gray-900 whitespace-nowrap truncate min-w-0`}>
+          {event.headerLabel}
         </div>
-        {justPassed && (
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap bg-gray-900 text-white">
-            Just passed · {minutesAgo < 1 ? "now" : `${minutesAgo} min ago`}
+        {event.moonIlluminationPercent != null && (
+          <span className="text-xs text-gray-400 font-medium whitespace-nowrap shrink-0">
+            {event.moonIlluminationPercent}% illum.
           </span>
         )}
       </div>
-      {/* Fixed-height badge row (fog left, potential right) so every tile's
-          content below starts at the same height, loaded or not. */}
+
       <div className="flex items-center justify-between gap-2 h-7 mt-2">
         <FogBadge fog={fog} />
         {potential ? (
@@ -681,62 +679,67 @@ function EventTile({
           weatherLoading && <span className="text-xs text-gray-300 whitespace-nowrap">Potential…</span>
         )}
       </div>
-      {(isSun || isMoon) && (
-        <SkyScene
-          body={isSun ? "sun" : "moon"}
-          rising={event.kind === "Sunrise" || event.kind === "Moonrise"}
-          moon={event.moonPhase}
-          clouds={
-            pointWeather
-              ? { low: pointWeather.tip.cloudLow, mid: pointWeather.tip.cloudMid, high: pointWeather.tip.cloudHigh }
-              : null
-          }
-          cloudsLoading={weatherLoading}
-        />
-      )}
-      {event.timePoints && (
-        <div className={`my-2 grid ${event.timePoints.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
-          {event.timePoints.map((t, i) => (
-            <div key={i} className="text-center px-1 min-w-0">
-              <div className={`${SERIF} text-lg font-bold text-gray-900 tracking-tight truncate`}>{fmt(t.date, timeZone)}</div>
-              <div className="text-[11px] leading-tight text-gray-400 mt-0.5 whitespace-nowrap">{t.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
-      {event.detail && (
-        <div className="text-sm text-gray-500 leading-relaxed my-1.5">{event.detail}</div>
-      )}
-      {event.celestialLink && (
-        <a
-          href={event.celestialLink.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-indigo-600 hover:text-indigo-700 text-xs font-semibold mb-3 inline-block"
-        >
-          {event.celestialLink.label}
-        </a>
-      )}
-      <div className="mt-auto pt-1 space-y-2">
-        <div className="min-w-0">
-          <div className="text-xs text-gray-400 font-medium uppercase tracking-wide whitespace-nowrap">
-            At your location
-          </div>
-          <div className="text-sm text-gray-800 font-semibold truncate">
-            {pointWeather
-              ? `${pointWeather.pin.tempF != null ? Math.round(pointWeather.pin.tempF) + "°F" : "Not available"} · ${fmtPercent(pointWeather.pin.precipProbability)} precip · ${fmtMiles(pointWeather.pin.visibilityMiles)} visibility`
-              : "Loading…"}
-          </div>
-        </div>
 
-        {hasMap && (
-          <div className="relative z-0 rounded-lg overflow-hidden">
-            <EventMap pinLat={pinLat} pinLng={pinLng} bearingDeg={event.bearingDeg!} onPinMove={onPinMove} />
-            <div className="absolute bottom-2 left-2 right-2 text-[10px] text-gray-500 bg-white/90 px-2 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis">
-              Pin · arrow toward {eventDirectionLabel(event.kind)}, 20mi
-            </div>
+      <SkyScene
+        body={sceneBody}
+        rising={event.kind === "Sunrise" || event.kind === "Moonrise"}
+        moon={event.moonPhase}
+        clouds={
+          pointWeather
+            ? { low: pointWeather.tip.cloudLow, mid: pointWeather.tip.cloudMid, high: pointWeather.tip.cloudHigh }
+            : null
+        }
+        cloudsLoading={weatherLoading}
+        badge={justPassed ? `Just passed · ${minutesAgo < 1 ? "now" : `${minutesAgo} min ago`}` : undefined}
+      />
+
+      <div className="h-[3.25rem] my-2 overflow-hidden">
+        {event.timePoints ? (
+          <div className={`grid ${event.timePoints.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+            {event.timePoints.map((t, i) => (
+              <div key={i} className="text-center px-1 min-w-0">
+                <div className={`${SERIF} text-lg font-bold text-gray-900 tracking-tight truncate`}>
+                  {fmt(t.date, timeZone)}
+                </div>
+                <div className="text-[11px] leading-tight text-gray-400 mt-0.5 whitespace-nowrap truncate">{t.label}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-gray-500 leading-snug">
+            <p className="line-clamp-2">{event.detail}</p>
+            {event.celestialLink && (
+              <a
+                href={event.celestialLink.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-600 hover:text-indigo-700 font-semibold"
+              >
+                {event.celestialLink.label}
+              </a>
+            )}
           </div>
         )}
+      </div>
+
+      <div className="h-10 min-w-0">
+        <div className="text-xs text-gray-400 font-medium uppercase tracking-wide whitespace-nowrap">
+          At your location
+        </div>
+        <div className="text-sm text-gray-800 font-semibold truncate">
+          {pointWeather
+            ? `${pointWeather.pin.tempF != null ? Math.round(pointWeather.pin.tempF) + "°F" : "Not available"} · ${fmtPercent(pointWeather.pin.precipProbability)} precip · ${fmtMiles(pointWeather.pin.visibilityMiles)} visibility`
+            : weatherLoading
+              ? "Loading…"
+              : "Not available"}
+        </div>
+      </div>
+
+      <div className="relative z-0 rounded-lg overflow-hidden mt-2">
+        <EventMap pinLat={pinLat} pinLng={pinLng} bearingDeg={event.bearingDeg} onPinMove={onPinMove} />
+        <div className="absolute bottom-2 left-2 right-2 text-[10px] text-gray-500 bg-white/90 px-2 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis">
+          {event.bearingDeg != null ? `Pin · arrow toward ${eventDirectionLabel(event.kind)}, 20mi` : "Pin · your location"}
+        </div>
       </div>
     </div>
   );
@@ -792,9 +795,14 @@ function DayRow({
         <span>{label}</span>
       </h3>
       {useSlider ? (
-        <div className="flex gap-7 overflow-x-auto snap-x snap-mandatory pb-2">
+        // Phones stack every tile vertically; the sideways slider only kicks
+        // in at md+ where 2-3 tiles sit side by side.
+        <div className="grid grid-cols-1 gap-7 md:flex md:overflow-x-auto md:snap-x md:snap-mandatory md:pb-2">
           {items.map((item) => (
-            <div key={item.event.id} className="flex-none w-[min(90vw,380px)] xl:w-[calc(33.333%-1.2rem)] snap-start">
+            <div
+              key={item.event.id}
+              className="md:flex-none md:w-[calc(50%-0.875rem)] xl:w-[calc(33.333%-1.2rem)] md:snap-start"
+            >
               {tile(item)}
             </div>
           ))}
@@ -987,22 +995,20 @@ export default function GoldenHourCalculator() {
       const targets = combined.map((e) => e.primaryTime);
 
       setWeatherLoading(true);
-      Promise.allSettled(
-        combined.map((e) => {
-          const pinPromise = fetchPointWeather(lat, lng, e.primaryTime);
-          if (e.bearingDeg == null) {
-            return pinPromise.then((pin) => ({ pin, tip: pin }));
-          }
-          const tip = destinationPoint(lat, lng, e.bearingDeg, 20);
-          return Promise.all([pinPromise, fetchPointWeather(tip.lat, tip.lng, e.primaryTime)]).then(
-            ([pin, tipReading]) => ({ pin, tip: tipReading })
-          );
-        })
-      ).then((results) => {
-        if (cancelled) return;
-        setPointWeatherByEvent(results.map((r) => (r.status === "fulfilled" ? r.value : null)));
-        setWeatherLoading(false);
-      });
+      // One batched request for every tile: the pin reading plus the point
+      // 20mi toward the event (events with no direction reuse the pin).
+      const tips = combined.map((e) => (e.bearingDeg != null ? destinationPoint(lat, lng, e.bearingDeg, 20) : { lat, lng }));
+      fetchPointWeatherBatch([
+        ...combined.map((e) => ({ lat, lng, target: e.primaryTime })),
+        ...combined.map((e, i) => ({ lat: tips[i].lat, lng: tips[i].lng, target: e.primaryTime })),
+      ])
+        .then((readings) => combined.map((_, i) => ({ pin: readings[i], tip: readings[combined.length + i] })))
+        .catch(() => combined.map(() => null))
+        .then((pairs) => {
+          if (cancelled) return;
+          setPointWeatherByEvent(pairs);
+          setWeatherLoading(false);
+        });
 
       fetchFogAssessments(lat, lng, targets)
         .then((fog) => {
