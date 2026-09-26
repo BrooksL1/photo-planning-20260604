@@ -15,6 +15,9 @@ const SAMPLE_STEP_MS = 5 * 60 * 1000;
 const MOON_STANDARD_ALTITUDE_DEG = 0.13;
 const MOON_CLEARANCE_ALTITUDE_DEG = 3;
 
+// How far outside golden hour a moonrise/moonset still counts as photographable.
+const GOLDEN_HOUR_MARGIN_MS = 60 * 60 * 1000;
+
 function isValidDate(d: unknown): d is Date {
   return d instanceof Date && !isNaN(d.getTime());
 }
@@ -102,11 +105,12 @@ export function horizonCrossing(e: MoonEvent): Date {
 
 /**
  * Moonrise/moonset events (standard threshold + a 3deg "clear of horizon
- * clutter" marker) restricted to nighttime -- between evening
- * golden-hour-begin and the *next* morning's golden-hour-end -- and within
- * [now - 1h, windowEnd] (by horizon-crossing time, so a moonrise/moonset
- * that just happened still shows). Daytime moon events are intentionally excluded since
- * they're not photographable.
+ * clutter" marker) restricted to the photographable part of the day --
+ * from an hour before evening golden-hour-begin to an hour after the *next*
+ * morning's golden-hour-end -- and within [now - 1h, windowEnd] (by
+ * horizon-crossing time, so a moonrise/moonset that just happened still
+ * shows). Midday moon events are excluded: a pale moon in a bright sky
+ * isn't a shot anyone plans for.
  */
 export function getUpcomingMoonEvents(
   lat: number,
@@ -131,9 +135,12 @@ export function getUpcomingMoonEvents(
     morningBase.setDate(morningBase.getDate() + 1);
     const morningTimes = SunCalc.getTimes(morningBase, lat, lng);
 
-    const nightStart = eveningTimes.goldenHour;
-    const nightEnd = morningTimes.goldenHourEnd;
-    if (!isValidDate(nightStart) || !isValidDate(nightEnd)) continue;
+    if (!isValidDate(eveningTimes.goldenHour) || !isValidDate(morningTimes.goldenHourEnd)) continue;
+    // The margin matters most near full moon: the day before full, the moon
+    // rises shortly *before* golden hour -- the classic moonrise-over-a-lit-
+    // landscape shot -- and the day after, it sets just after sunrise.
+    const nightStart = new Date(eveningTimes.goldenHour.getTime() - GOLDEN_HOUR_MARGIN_MS);
+    const nightEnd = new Date(morningTimes.goldenHourEnd.getTime() + GOLDEN_HOUR_MARGIN_MS);
 
     const sampleStart = new Date(Math.max(nightStart.getTime(), sampleFloor));
     const sampleEnd = new Date(Math.min(nightEnd.getTime(), windowEnd.getTime()));

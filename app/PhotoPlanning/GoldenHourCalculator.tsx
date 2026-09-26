@@ -146,6 +146,52 @@ function computePotential(pointWeather: PointWeatherPair | null, fog: FogAssessm
   return { label: tier, reason };
 }
 
+// Moon shots want the opposite of a sunrise: the moon is the subject, not a
+// light source for the clouds, so any cloud on the line of sight is a cost and
+// clear, clean air matters most. Visibility is judged for long telephoto
+// shots (a subject miles away), where haze swallows the moon's detail and
+// the foreground's edges long before the sky looks "hazy" to the eye.
+function computeMoonPotential(pointWeather: PointWeatherPair | null): PotentialResult | null {
+  if (!pointWeather) return null;
+  const { cloudLow, cloudMid, cloudHigh } = pointWeather.tip;
+  const precipAtPin = pointWeather.pin.precipProbability;
+  if (cloudLow == null || cloudMid == null || cloudHigh == null || precipAtPin == null) return null;
+
+  // Layers are summed (can exceed 100%) -- deliberately conservative, since
+  // cloud at any altitude along the line toward the moon can cover it.
+  const total = cloudLow + cloudMid + cloudHigh;
+  const layers = `low ${Math.round(cloudLow)}% / mid ${Math.round(cloudMid)}% / high ${Math.round(cloudHigh)}%`;
+  const visibilityMiles = pointWeather.pin.visibilityMiles;
+  const vis = visibilityMiles != null ? `${Math.round(visibilityMiles)}mi` : null;
+
+  if (precipAtPin > 40) {
+    return { label: "Low Potential", reason: `Poor: a ${Math.round(precipAtPin)}% chance of precipitation makes a clear view of the moon unlikely.` };
+  }
+  if (cloudLow > 20) {
+    return { label: "Low Potential", reason: `Poor: ${Math.round(cloudLow)}% low cloud toward the moon will likely hide it right at the horizon.` };
+  }
+  if (total > 50) {
+    return { label: "Too Much Cloud Cover", reason: `Too cloudy: ${layers} toward the moon (${Math.round(total)}% total) -- expect it to be covered for much of the window.` };
+  }
+  if (visibilityMiles != null && visibilityMiles < 10) {
+    return { label: "Low Potential", reason: `Poor: visibility is only ${visibilityMiles.toFixed(1)}mi, so haze will wash out a distant moon and skyline.` };
+  }
+  if (total > 20) {
+    return { label: "Some Potential", reason: `Mixed: ${layers} toward the moon (${Math.round(total)}% total). It may slip between clouds, but expect interruptions.` };
+  }
+  // Clear line of sight (<= 20% total cloud) -- now it comes down to air clarity.
+  if (visibilityMiles != null && visibilityMiles < 20) {
+    return { label: "Some Potential", reason: `Clear sky (${Math.round(total)}% total cloud), but ${vis} visibility means haze will soften a long-distance shot.` };
+  }
+  if (visibilityMiles != null && visibilityMiles >= 25 && total <= 10) {
+    return { label: "Very Promising!", reason: `Excellent: nearly cloudless toward the moon (${Math.round(total)}% total) with ${vis} visibility -- clean air for a crisp long-lens shot.` };
+  }
+  return {
+    label: "High Potential",
+    reason: `Good: clear line of sight (${Math.round(total)}% total cloud)${vis ? ` and ${vis} visibility` : ""}.`,
+  };
+}
+
 // All displayed times are in the location's zone, not the device's.
 function fmt(date: Date, timeZone: string): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone });
@@ -595,11 +641,11 @@ function EventTile({
   onPinMove: (lat: number, lng: number) => void;
 }) {
   const hasMap = event.bearingDeg != null;
-  const potential = computePotential(pointWeather, fog);
   const minutesAgo = Math.floor((referenceTime.getTime() - event.primaryTime.getTime()) / 60000);
   const justPassed = minutesAgo >= 0;
   const isSun = event.kind === "Sunrise" || event.kind === "Sunset";
   const isMoon = event.kind === "Moonrise" || event.kind === "Moonset";
+  const potential = isMoon ? computeMoonPotential(pointWeather) : computePotential(pointWeather, fog);
 
   return (
     <div className={`border-t-[3px] ${justPassed ? "border-gray-300" : "border-indigo-500"} pt-4 h-full flex flex-col`}>
