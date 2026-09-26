@@ -344,7 +344,11 @@ function ClickTip({
 
 function FogBadge({ fog }: { fog: FogAssessment | null }) {
   if (!fog) {
-    return <span className="text-xs text-gray-400">Fog: Not available</span>;
+    return (
+      <span className="text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap bg-gray-50 text-gray-400">
+        Fog · Not available
+      </span>
+    );
   }
 
   const rows = [
@@ -375,29 +379,27 @@ function FogBadge({ fog }: { fog: FogAssessment | null }) {
   ];
 
   return (
-    <div className="mb-3">
-      <ClickTip
-        trigger={<>Fog · {fog.likelihood}</>}
-        triggerClassName={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap cursor-pointer ${FOG_BADGE_COLORS[fog.likelihood]}`}
-        panelClassName="left-0 bottom-full mb-1.5 w-72 p-3"
-      >
-        <p>{fog.reason}</p>
-        <div className="mt-2 pt-2 border-t border-gray-700 space-y-1.5">
-          {rows.map((r) => (
-            <div key={r.label} className="flex justify-between gap-4">
-              <span>
-                {r.label}
-                <span className="block text-gray-400 text-[10px]">{r.hint}</span>
-              </span>
-              <span className="font-semibold text-right whitespace-nowrap">
-                {r.value}
-                <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(r.points)}</span>
-              </span>
-            </div>
-          ))}
-        </div>
-      </ClickTip>
-    </div>
+    <ClickTip
+      trigger={<>Fog · {fog.likelihood}</>}
+      triggerClassName={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap cursor-pointer ${FOG_BADGE_COLORS[fog.likelihood]}`}
+      panelClassName="left-0 top-full mt-1.5 w-72 p-3"
+    >
+      <p>{fog.reason}</p>
+      <div className="mt-2 pt-2 border-t border-gray-700 space-y-1.5">
+        {rows.map((r) => (
+          <div key={r.label} className="flex justify-between gap-4">
+            <span>
+              {r.label}
+              <span className="block text-gray-400 text-[10px]">{r.hint}</span>
+            </span>
+            <span className="font-semibold text-right whitespace-nowrap">
+              {r.value}
+              <span className="block text-gray-400 font-medium text-[10px]">{fogPointLabel(r.points)}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </ClickTip>
   );
 }
 
@@ -616,16 +618,21 @@ function EventTile({
             Just passed · {minutesAgo < 1 ? "now" : `${minutesAgo} min ago`}
           </span>
         )}
-        {potential && (
-          <div className="shrink-0 ml-auto">
-            <ClickTip
-              trigger={potential.label}
-              triggerClassName={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap cursor-pointer ${POTENTIAL_BADGE_COLORS[potential.label]}`}
-              panelClassName="right-0 top-full mt-1.5 w-56 p-2.5"
-            >
-              {potential.reason}
-            </ClickTip>
-          </div>
+      </div>
+      {/* Fixed-height badge row (fog left, potential right) so every tile's
+          content below starts at the same height, loaded or not. */}
+      <div className="flex items-center justify-between gap-2 h-7 mt-2">
+        <FogBadge fog={fog} />
+        {potential ? (
+          <ClickTip
+            trigger={potential.label}
+            triggerClassName={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap cursor-pointer ${POTENTIAL_BADGE_COLORS[potential.label]}`}
+            panelClassName="right-0 top-full mt-1.5 w-56 p-2.5"
+          >
+            {potential.reason}
+          </ClickTip>
+        ) : (
+          weatherLoading && <span className="text-xs text-gray-300 whitespace-nowrap">Potential…</span>
         )}
       </div>
       {(isSun || isMoon) && (
@@ -665,18 +672,7 @@ function EventTile({
           {event.celestialLink.label}
         </a>
       )}
-      <FogBadge fog={fog} />
-
-      {hasMap && (
-        <div className="relative z-0 rounded-lg overflow-hidden mb-3">
-          <EventMap pinLat={pinLat} pinLng={pinLng} bearingDeg={event.bearingDeg!} onPinMove={onPinMove} />
-          <div className="absolute bottom-2 left-2 right-2 text-[10px] text-gray-500 bg-white/90 px-2 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis">
-            Pin · arrow toward {eventDirectionLabel(event.kind)}, 20mi
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-2.5 mt-auto">
+      <div className="mt-auto pt-1 space-y-2">
         <div className="min-w-0">
           <div className="text-xs text-gray-400 font-medium uppercase tracking-wide whitespace-nowrap">
             At your location
@@ -687,15 +683,12 @@ function EventTile({
               : "Loading…"}
           </div>
         </div>
+
         {hasMap && (
-          <div className="min-w-0">
-            <div className="text-xs text-gray-400 font-medium uppercase tracking-wide whitespace-nowrap">
-              Toward the event (20mi)
-            </div>
-            <div className="text-sm text-gray-800 font-semibold truncate">
-              {pointWeather
-                ? `Low ${fmtPercent(pointWeather.tip.cloudLow)} / Mid ${fmtPercent(pointWeather.tip.cloudMid)} / High ${fmtPercent(pointWeather.tip.cloudHigh)}`
-                : "Loading…"}
+          <div className="relative z-0 rounded-lg overflow-hidden">
+            <EventMap pinLat={pinLat} pinLng={pinLng} bearingDeg={event.bearingDeg!} onPinMove={onPinMove} />
+            <div className="absolute bottom-2 left-2 right-2 text-[10px] text-gray-500 bg-white/90 px-2 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis">
+              Pin · arrow toward {eventDirectionLabel(event.kind)}, 20mi
             </div>
           </div>
         )}
