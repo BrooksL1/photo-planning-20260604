@@ -1,5 +1,6 @@
 import SunCalc from "suncalc";
 import type { MoonEvent } from "./types";
+import { RECENT_WINDOW_MS } from "./solarEvents";
 
 const SAMPLE_STEP_MS = 5 * 60 * 1000;
 
@@ -94,11 +95,17 @@ function pairCrossings(crossings: Crossing[]): MoonEvent[] {
   return events;
 }
 
+// The standard-altitude (true rise/set) time -- first for Moonrise, last for Moonset.
+export function horizonCrossing(e: MoonEvent): Date {
+  return e.kind === "Moonrise" ? e.times[0].date : e.times[1].date;
+}
+
 /**
  * Moonrise/moonset events (standard threshold + a 3deg "clear of horizon
  * clutter" marker) restricted to nighttime -- between evening
  * golden-hour-begin and the *next* morning's golden-hour-end -- and within
- * [now, windowEnd]. Daytime moon events are intentionally excluded since
+ * [now - 1h, windowEnd] (by horizon-crossing time, so a moonrise/moonset
+ * that just happened still shows). Daytime moon events are intentionally excluded since
  * they're not photographable.
  */
 export function getUpcomingMoonEvents(
@@ -108,6 +115,10 @@ export function getUpcomingMoonEvents(
   now: Date = new Date()
 ): MoonEvent[] {
   const events: MoonEvent[] = [];
+  const recentCutoff = now.getTime() - RECENT_WINDOW_MS;
+  // Sample from further back than the cutoff so a moonset whose 3deg marker
+  // precedes the cutoff still pairs up with its horizon crossing.
+  const sampleFloor = recentCutoff - 2 * RECENT_WINDOW_MS;
   const spanDays = Math.ceil((windowEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)) + 1;
 
   for (let dayOffset = -1; dayOffset <= spanDays; dayOffset++) {
@@ -124,7 +135,7 @@ export function getUpcomingMoonEvents(
     const nightEnd = morningTimes.goldenHourEnd;
     if (!isValidDate(nightStart) || !isValidDate(nightEnd)) continue;
 
-    const sampleStart = new Date(Math.max(nightStart.getTime(), now.getTime()));
+    const sampleStart = new Date(Math.max(nightStart.getTime(), sampleFloor));
     const sampleEnd = new Date(Math.min(nightEnd.getTime(), windowEnd.getTime()));
     if (sampleStart >= sampleEnd) continue;
 
@@ -132,5 +143,7 @@ export function getUpcomingMoonEvents(
     events.push(...pairCrossings(crossings));
   }
 
-  return events.sort((a, b) => a.times[0].date.getTime() - b.times[0].date.getTime());
+  return events
+    .filter((e) => horizonCrossing(e).getTime() > recentCutoff)
+    .sort((a, b) => a.times[0].date.getTime() - b.times[0].date.getTime());
 }

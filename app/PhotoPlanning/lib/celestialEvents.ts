@@ -1,4 +1,5 @@
 import type { CelestialEvent } from "./types";
+import { DEVICE_TIME_ZONE, zonedParts, zonedTimeToDate } from "./timeZone";
 
 // Hardcoded from NASA's eclipse decade tables (eclipse.gsfc.nasa.gov) --
 // there is no free queryable eclipse API. Dates/regions are approximate;
@@ -45,10 +46,12 @@ const COMET_NOTE: CelestialEvent = {
   sourceUrl: "https://theskylive.com/comets",
 };
 
-function nextOccurrence(month: number, day: number, now: Date): Date {
-  let candidate = new Date(now.getFullYear(), month - 1, day, 12, 0, 0);
+// Noon on the peak date, in the location's zone.
+function nextOccurrence(month: number, day: number, now: Date, timeZone: string): Date {
+  const year = zonedParts(now, timeZone).year;
+  let candidate = zonedTimeToDate({ year, month, day, hour: 12, minute: 0 }, timeZone);
   if (candidate < now) {
-    candidate = new Date(now.getFullYear() + 1, month - 1, day, 12, 0, 0);
+    candidate = zonedTimeToDate({ year: year + 1, month, day, hour: 12, minute: 0 }, timeZone);
   }
   return candidate;
 }
@@ -57,7 +60,11 @@ function nextOccurrence(month: number, day: number, now: Date): Date {
  * Eclipses and meteor shower peaks falling within [now, windowEnd], plus a
  * standing "not available" note for comets (see COMET_NOTE above for why).
  */
-export function getUpcomingCelestialEvents(windowEnd: Date, now: Date = new Date()): CelestialEvent[] {
+export function getUpcomingCelestialEvents(
+  windowEnd: Date,
+  now: Date = new Date(),
+  timeZone: string = DEVICE_TIME_ZONE
+): CelestialEvent[] {
   const events: CelestialEvent[] = [];
 
   for (const eclipse of ECLIPSES) {
@@ -74,7 +81,7 @@ export function getUpcomingCelestialEvents(windowEnd: Date, now: Date = new Date
   }
 
   for (const shower of METEOR_SHOWERS) {
-    const date = nextOccurrence(shower.month, shower.day, now);
+    const date = nextOccurrence(shower.month, shower.day, now, timeZone);
     if (date >= now && date <= windowEnd) {
       events.push({
         category: "Meteor Shower",

@@ -1,6 +1,9 @@
 import SunCalc from "suncalc";
 import type { SolarEvent } from "./types";
 
+// How far back a horizon crossing still counts as "just happened" and gets a tile.
+export const RECENT_WINDOW_MS = 60 * 60 * 1000;
+
 // Enough candidate days to always have 8 future events (4 sunrise + 4
 // sunset) available after filtering, with margin.
 const CANDIDATE_DAYS = 6;
@@ -15,12 +18,13 @@ function isValidDate(d: unknown): d is Date {
  * Sunrise / Golden Hour Ends, reversed for Sunset) for display context only
  * -- the actual weather lookup happens at the Sunrise/Sunset instant itself.
  * Sunrise/sunset strictly alternate, so the next 8 chronological events are
- * always exactly 4 of each.
+ * always exactly 4 of each. Any event whose horizon crossing fell within
+ * the last hour (RECENT_WINDOW_MS) is prepended on top of those 8.
  */
 export function getUpcomingSolarEvents(lat: number, lng: number, now: Date = new Date()): SolarEvent[] {
   const candidates: SolarEvent[] = [];
 
-  for (let dayOffset = 0; dayOffset <= CANDIDATE_DAYS; dayOffset++) {
+  for (let dayOffset = -1; dayOffset <= CANDIDATE_DAYS; dayOffset++) {
     const base = new Date(now);
     base.setDate(base.getDate() + dayOffset);
     base.setHours(12, 0, 0, 0);
@@ -51,8 +55,8 @@ export function getUpcomingSolarEvents(lat: number, lng: number, now: Date = new
     }
   }
 
-  return candidates
-    .filter((c) => c.at > now)
-    .sort((a, b) => a.at.getTime() - b.at.getTime())
-    .slice(0, 8);
+  const sorted = candidates.sort((a, b) => a.at.getTime() - b.at.getTime());
+  const recent = sorted.filter((c) => c.at <= now && c.at.getTime() > now.getTime() - RECENT_WINDOW_MS);
+  const upcoming = sorted.filter((c) => c.at > now).slice(0, 8);
+  return [...recent, ...upcoming];
 }

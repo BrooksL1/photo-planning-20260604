@@ -5,12 +5,22 @@ import dynamic from "next/dynamic";
 import SunCalc from "suncalc";
 import type { SolarEvent, MoonEvent, CelestialEvent } from "./lib/types";
 import { getUpcomingSolarEvents } from "./lib/solarEvents";
-import { getUpcomingMoonEvents } from "./lib/moonEvents";
+import { getUpcomingMoonEvents, horizonCrossing } from "./lib/moonEvents";
 import { getUpcomingCelestialEvents } from "./lib/celestialEvents";
 import { fetchFogAssessments, type FogAssessment, type FogLikelihood } from "./lib/fogPredictor";
 import { searchPlaces, type PlaceSuggestion } from "./lib/geocode";
 import { destinationPoint, toCompassBearing } from "./lib/geo";
 import { fetchPointWeather, type PointReading } from "./lib/pointWeather";
+import { isWithinForecastRange, FORECAST_FUTURE_LIMIT_DAYS } from "./lib/openMeteoHourly";
+import SkyScene from "./SkyScene";
+import {
+  DEVICE_TIME_ZONE,
+  fetchTimeZone,
+  zonedParts,
+  wallTimeStringToDate,
+  dateToWallTimeString,
+  timeZoneAbbreviation,
+} from "./lib/timeZone";
 
 // Leaflet touches `window` at import time -- must load client-only.
 const EventMap = dynamic(() => import("./EventMap"), {
@@ -34,6 +44,9 @@ type UnifiedEvent = {
   // Plain-text description for events with no time window (celestial).
   detail?: string;
   moonIlluminationPercent?: number;
+  // For the sky illustration: lit fraction (0-1) and the clockwise rotation
+  // that points the bright limb where it really is, as seen from the pin.
+  moonPhase?: { fraction: number; rotationDeg: number };
   celestialLink?: { url: string; label: string };
   bearingDeg?: number;
 };
@@ -133,8 +146,22 @@ function computePotential(pointWeather: PointWeatherPair | null, fog: FogAssessm
   return { label: tier, reason };
 }
 
-function fmt(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+// All displayed times are in the location's zone, not the device's.
+function fmt(date: Date, timeZone: string): string {
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone });
+}
+
+function fmtDateTime(d: Date, timeZone: string): string {
+  const sameYear = zonedParts(d, timeZone).year === zonedParts(new Date(), timeZone).year;
+  return d.toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: sameYear ? undefined : "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  });
 }
 
 function fmtPercent(v: number | null): string {
@@ -171,7 +198,8 @@ function buildUnifiedEvents(
   lng: number,
   solarEvents: SolarEvent[],
   moonEvents: MoonEvent[],
-  celestialEvents: CelestialEvent[]
+  celestialEvents: CelestialEvent[],
+  timeZone: string
 ): UnifiedEvent[] {
   const events: UnifiedEvent[] = [];
 
@@ -181,24 +209,30 @@ function buildUnifiedEvents(
       id: `solar-${i}`,
       kind: e.kind,
       primaryTime: e.at,
-      headerLabel: `${e.kind} · ${fmt(e.at)}`,
+      headerLabel: `${e.kind} · ${fmt(e.at, timeZone)}`,
       timePoints: e.boundaryTimes,
       bearingDeg,
     });
   });
 
   moonEvents.forEach((e, i) => {
-    const primaryTime = e.kind === "Moonrise" ? e.times[0].date : e.times[1].date;
-    const illumination = Math.round(SunCalc.getMoonIllumination(primaryTime).fraction * 100);
+    const primaryTime = horizonCrossing(e);
+    const illum = SunCalc.getMoonIllumination(primaryTime);
+    const illumination = Math.round(illum.fraction * 100);
     if (illumination <= 1) return;
-    const bearingDeg = toCompassBearing(SunCalc.getMoonPosition(primaryTime, lat, lng).azimuth);
+    const position = SunCalc.getMoonPosition(primaryTime, lat, lng);
+    const bearingDeg = toCompassBearing(position.azimuth);
+    // angle - parallacticAngle is the bright limb's angle from the zenith,
+    // measured counterclockwise on the sky; SVG rotates clockwise, hence the negation.
+    const brightLimbDeg = ((illum.angle - position.parallacticAngle) * 180) / Math.PI;
     events.push({
       id: `moon-${i}`,
       kind: e.kind,
       primaryTime,
-      headerLabel: `${e.kind} · ${fmt(primaryTime)}`,
+      headerLabel: `${e.kind} · ${fmt(primaryTime, timeZone)}`,
       timePoints: e.times,
       moonIlluminationPercent: illumination,
+      moonPhase: { fraction: illum.fraction, rotationDeg: -brightLimbDeg },
       bearingDeg,
     });
   });
@@ -209,7 +243,7 @@ function buildUnifiedEvents(
       id: `celestial-${i}`,
       kind: e.category === "Eclipse" ? "Eclipse" : "Meteor Shower",
       primaryTime: e.date,
-      headerLabel: `${e.title} · ${fmt(e.date)}`,
+      headerLabel: `${e.title} · ${fmt(e.date, timeZone)}`,
       detail: e.detail,
       celestialLink: { url: e.sourceUrl, label: "Verify source" },
     });
@@ -218,25 +252,33 @@ function buildUnifiedEvents(
   return events.sort((a, b) => a.primaryTime.getTime() - b.primaryTime.getTime());
 }
 
-function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+function dayKey(d: Date, timeZone: string): string {
+  const p = zonedParts(d, timeZone);
+  return `${p.year}-${p.month}-${p.day}`;
 }
 
-function dayLabel(d: Date): string {
-  return d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+function dayLabel(d: Date, timeZone: string): string {
+  const sameYear = zonedParts(d, timeZone).year === zonedParts(new Date(), timeZone).year;
+  return d.toLocaleDateString([], {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: sameYear ? undefined : "numeric",
+    timeZone,
+  });
 }
 
 type IndexedEvent = { event: UnifiedEvent; index: number };
 
-function groupByDay(events: UnifiedEvent[]): { key: string; label: string; items: IndexedEvent[] }[] {
+function groupByDay(events: UnifiedEvent[], timeZone: string): { key: string; label: string; items: IndexedEvent[] }[] {
   const map = new Map<string, IndexedEvent[]>();
   events.forEach((event, index) => {
-    const key = dayKey(event.primaryTime);
+    const key = dayKey(event.primaryTime, timeZone);
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push({ event, index });
   });
   return Array.from(map.entries())
-    .map(([key, items]) => ({ key, label: dayLabel(items[0].event.primaryTime), items }))
+    .map(([key, items]) => ({ key, label: dayLabel(items[0].event.primaryTime, timeZone), items }))
     .sort((a, b) => a.items[0].event.primaryTime.getTime() - b.items[0].event.primaryTime.getTime());
 }
 
@@ -444,6 +486,15 @@ function DeviceLocationIcon({ className }: { className?: string }) {
   );
 }
 
+function ClockIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 7.5V12l3 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function SearchIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
@@ -526,6 +577,9 @@ function EventTile({
   pinLat,
   pinLng,
   pointWeather,
+  weatherLoading,
+  referenceTime,
+  timeZone,
   onPinMove,
 }: {
   event: UnifiedEvent;
@@ -533,13 +587,20 @@ function EventTile({
   pinLat: number;
   pinLng: number;
   pointWeather: PointWeatherPair | null;
+  weatherLoading: boolean;
+  referenceTime: Date;
+  timeZone: string;
   onPinMove: (lat: number, lng: number) => void;
 }) {
   const hasMap = event.bearingDeg != null;
   const potential = computePotential(pointWeather, fog);
+  const minutesAgo = Math.floor((referenceTime.getTime() - event.primaryTime.getTime()) / 60000);
+  const justPassed = minutesAgo >= 0;
+  const isSun = event.kind === "Sunrise" || event.kind === "Sunset";
+  const isMoon = event.kind === "Moonrise" || event.kind === "Moonset";
 
   return (
-    <div className="border-t-[3px] border-indigo-500 pt-4 h-full flex flex-col">
+    <div className={`border-t-[3px] ${justPassed ? "border-gray-300" : "border-indigo-500"} pt-4 h-full flex flex-col`}>
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
         <div className="flex items-center gap-2 min-w-0">
           <EventIcon kind={event.kind} />
@@ -550,6 +611,11 @@ function EventTile({
             </span>
           )}
         </div>
+        {justPassed && (
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap bg-gray-900 text-white">
+            Just passed · {minutesAgo < 1 ? "now" : `${minutesAgo} min ago`}
+          </span>
+        )}
         {potential && (
           <div className="shrink-0 ml-auto">
             <ClickTip
@@ -562,11 +628,25 @@ function EventTile({
           </div>
         )}
       </div>
+      {(isSun || isMoon) && (
+        <SkyScene
+          body={isSun ? "sun" : "moon"}
+          rising={event.kind === "Sunrise" || event.kind === "Moonrise"}
+          moon={event.moonPhase}
+          clouds={
+            pointWeather
+              ? { low: pointWeather.tip.cloudLow, mid: pointWeather.tip.cloudMid, high: pointWeather.tip.cloudHigh }
+              : null
+          }
+          cloudsLoading={weatherLoading}
+          bearingDeg={event.bearingDeg}
+        />
+      )}
       {event.timePoints && (
         <div className={`my-2 grid ${event.timePoints.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
           {event.timePoints.map((t, i) => (
             <div key={i} className="text-center px-1 min-w-0">
-              <div className={`${SERIF} text-lg font-bold text-gray-900 tracking-tight truncate`}>{fmt(t.date)}</div>
+              <div className={`${SERIF} text-lg font-bold text-gray-900 tracking-tight truncate`}>{fmt(t.date, timeZone)}</div>
               <div className="text-[11px] leading-tight text-gray-400 mt-0.5 whitespace-nowrap">{t.label}</div>
             </div>
           ))}
@@ -629,6 +709,9 @@ function DayRow({
   items,
   fogAssessments,
   pointWeatherByEvent,
+  weatherLoading,
+  referenceTime,
+  timeZone,
   pinLat,
   pinLng,
   onPinMove,
@@ -638,6 +721,9 @@ function DayRow({
   items: IndexedEvent[];
   fogAssessments: (FogAssessment | null)[];
   pointWeatherByEvent: (PointWeatherPair | null)[];
+  weatherLoading: boolean;
+  referenceTime: Date;
+  timeZone: string;
   pinLat: number;
   pinLng: number;
   onPinMove: (lat: number, lng: number) => void;
@@ -653,6 +739,9 @@ function DayRow({
       pinLat={pinLat}
       pinLng={pinLng}
       pointWeather={pointWeatherByEvent[index] ?? null}
+      weatherLoading={weatherLoading}
+      referenceTime={referenceTime}
+      timeZone={timeZone}
       onPinMove={onPinMove}
     />
   );
@@ -700,6 +789,18 @@ export default function GoldenHourCalculator() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [cometNote, setCometNote] = useState<CelestialEvent | null>(null);
 
+  // IANA zone of the pin; every time on the page is shown in it.
+  const [timeZone, setTimeZone] = useState<string>(DEVICE_TIME_ZONE);
+  // null = "now" (the default). Otherwise a wall-clock time ("YYYY-MM-DDTHH:mm")
+  // read in the location's zone -- so "Oct 4, 6:00 AM" means 6 AM wherever the
+  // pin is, even if the pin moves after it's set.
+  const [customTime, setCustomTime] = useState<string | null>(null);
+  const [timeOpen, setTimeOpen] = useState(false);
+  const [timeDraft, setTimeDraft] = useState("");
+  const timePopoverRef = useRef<HTMLDivElement>(null);
+  // The moment the current tiles were computed for ("just passed" is measured against it).
+  const [referenceTime, setReferenceTime] = useState<Date>(() => new Date());
+
   function movePin(newLat: number, newLng: number) {
     setLat(newLat);
     setLng(newLng);
@@ -736,6 +837,22 @@ export default function GoldenHourCalculator() {
     setLocationOpen(false);
   }
 
+  function openTimePicker() {
+    setTimeDraft(customTime ?? dateToWallTimeString(new Date(), timeZone));
+    setTimeOpen((v) => !v);
+  }
+
+  function applyTimeDraft() {
+    if (!wallTimeStringToDate(timeDraft, timeZone)) return;
+    setCustomTime(timeDraft);
+    setTimeOpen(false);
+  }
+
+  function resetToNow() {
+    setCustomTime(null);
+    setTimeOpen(false);
+  }
+
   // Ask for the user's location as soon as the app loads, rather than
   // waiting for a button click.
   useEffect(() => {
@@ -754,6 +871,17 @@ export default function GoldenHourCalculator() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [locationOpen]);
+
+  useEffect(() => {
+    if (!timeOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (timePopoverRef.current && !timePopoverRef.current.contains(e.target as Node)) {
+        setTimeOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [timeOpen]);
 
   useEffect(() => {
     if (locationQuery.trim().length < 3) {
@@ -797,57 +925,71 @@ export default function GoldenHourCalculator() {
     if (lat === null || lng === null) return;
     let cancelled = false;
 
-    // Window spans the next 4 sunrises + 4 sunsets; moon/celestial events
-    // are pulled in up through that same end point.
-    const solar = getUpcomingSolarEvents(lat, lng);
-    const windowEnd =
-      solar.length > 0 ? solar[solar.length - 1].at : new Date(Date.now() + 48 * 60 * 60 * 1000);
-    const moon = getUpcomingMoonEvents(lat, lng, windowEnd);
-    const celestial = getUpcomingCelestialEvents(windowEnd);
+    function loadEvents(lat: number, lng: number, tz: string) {
+      setTimeZone(tz);
+      // Window spans the next 4 sunrises + 4 sunsets after the reference time
+      // (plus anything that crossed the horizon in the hour before it);
+      // moon/celestial events are pulled in up through that same end point.
+      const now = (customTime && wallTimeStringToDate(customTime, tz)) || new Date();
+      setReferenceTime(now);
+      const solar = getUpcomingSolarEvents(lat, lng, now);
+      const windowEnd =
+        solar.length > 0 ? solar[solar.length - 1].at : new Date(now.getTime() + 48 * 60 * 60 * 1000);
+      const moon = getUpcomingMoonEvents(lat, lng, windowEnd, now);
+      const celestial = getUpcomingCelestialEvents(windowEnd, now, tz);
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- pure computation, no fetch involved
-    setCometNote(celestial.find((e) => e.category === "Comet") ?? null);
+      setCometNote(celestial.find((e) => e.category === "Comet") ?? null);
 
-    const combined = buildUnifiedEvents(lat, lng, solar, moon, celestial);
-    setUnifiedEvents(combined);
-    setFogAssessments(combined.map(() => null));
-    setPointWeatherByEvent(combined.map(() => null));
+      const combined = buildUnifiedEvents(lat, lng, solar, moon, celestial, tz);
+      setUnifiedEvents(combined);
+      setFogAssessments(combined.map(() => null));
+      setPointWeatherByEvent(combined.map(() => null));
 
-    if (combined.length === 0) return;
-    const targets = combined.map((e) => e.primaryTime);
+      if (combined.length === 0) return;
+      const targets = combined.map((e) => e.primaryTime);
 
-    setWeatherLoading(true);
-    Promise.allSettled(
-      combined.map((e) => {
-        const pinPromise = fetchPointWeather(lat, lng, e.primaryTime);
-        if (e.bearingDeg == null) {
-          return pinPromise.then((pin) => ({ pin, tip: pin }));
-        }
-        const tip = destinationPoint(lat, lng, e.bearingDeg, 20);
-        return Promise.all([pinPromise, fetchPointWeather(tip.lat, tip.lng, e.primaryTime)]).then(
-          ([pin, tipReading]) => ({ pin, tip: tipReading })
-        );
-      })
-    ).then((results) => {
-      if (cancelled) return;
-      setPointWeatherByEvent(results.map((r) => (r.status === "fulfilled" ? r.value : null)));
-      setWeatherLoading(false);
-    });
-
-    fetchFogAssessments(lat, lng, targets)
-      .then((fog) => {
-        if (!cancelled) setFogAssessments(fog);
-      })
-      .catch(() => {
-        if (!cancelled) setFogAssessments(targets.map(() => null));
+      setWeatherLoading(true);
+      Promise.allSettled(
+        combined.map((e) => {
+          const pinPromise = fetchPointWeather(lat, lng, e.primaryTime);
+          if (e.bearingDeg == null) {
+            return pinPromise.then((pin) => ({ pin, tip: pin }));
+          }
+          const tip = destinationPoint(lat, lng, e.bearingDeg, 20);
+          return Promise.all([pinPromise, fetchPointWeather(tip.lat, tip.lng, e.primaryTime)]).then(
+            ([pin, tipReading]) => ({ pin, tip: tipReading })
+          );
+        })
+      ).then((results) => {
+        if (cancelled) return;
+        setPointWeatherByEvent(results.map((r) => (r.status === "fulfilled" ? r.value : null)));
+        setWeatherLoading(false);
       });
+
+      fetchFogAssessments(lat, lng, targets)
+        .then((fog) => {
+          if (!cancelled) setFogAssessments(fog);
+        })
+        .catch(() => {
+          if (!cancelled) setFogAssessments(targets.map(() => null));
+        });
+    }
+
+    // The zone is needed before anything else: it decides what instant a
+    // custom wall-clock time means and which calendar day each event lands on.
+    fetchTimeZone(lat, lng).then((tz) => {
+      if (!cancelled) loadEvents(lat, lng, tz);
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [lat, lng]);
+  }, [lat, lng, customTime]);
 
-  const days = groupByDay(unifiedEvents);
+  const days = groupByDay(unifiedEvents, timeZone);
+  const customDate = customTime ? wallTimeStringToDate(customTime, timeZone) : null;
+  const zoneLabel = timeZoneAbbreviation(customDate ?? referenceTime, timeZone);
+  const beyondForecast = unifiedEvents.some((e) => !isWithinForecastRange(e.primaryTime));
 
   return (
     <div className="max-w-[1040px] w-full mx-auto">
@@ -902,8 +1044,62 @@ export default function GoldenHourCalculator() {
               </div>
             )}
           </div>
+
+          <div className="relative" ref={timePopoverRef}>
+            <button
+              onClick={openTimePicker}
+              className={`flex items-center gap-1.5 border rounded-full pl-3 pr-2.5 py-1.5 text-sm font-medium ${
+                customTime ? "border-amber-300 bg-amber-50 text-amber-800" : "border-indigo-200 bg-indigo-50 text-indigo-700"
+              }`}
+            >
+              <ClockIcon className={`w-3.5 h-3.5 ${customTime ? "text-amber-600" : "text-indigo-500"}`} />
+              {customDate ? fmtDateTime(customDate, timeZone) : "Now"}
+              <ChevronDownIcon className={`w-2.5 h-2.5 ${customTime ? "text-amber-400" : "text-indigo-300"}`} />
+            </button>
+
+            {timeOpen && (
+              <div className="absolute right-0 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 top-[calc(100%+8px)] w-72 bg-white border border-gray-200 rounded-xl shadow-xl p-2.5 z-30">
+                <button
+                  onClick={resetToNow}
+                  className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-gray-800 text-white rounded-lg px-3 py-2 text-xs font-semibold mb-2"
+                >
+                  <ClockIcon className="w-3.5 h-3.5" />
+                  Use now
+                </button>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    applyTimeDraft();
+                  }}
+                  className="flex items-center gap-1.5"
+                >
+                  <input
+                    type="datetime-local"
+                    value={timeDraft}
+                    onChange={(e) => setTimeDraft(e.target.value)}
+                    className="flex-1 min-w-0 border-2 border-indigo-500 rounded-lg px-2 py-1.5 text-xs text-gray-900 outline-none shadow-[0_0_0_3px_rgba(99,102,241,0.12)]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!timeDraft}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                  >
+                    Go
+                  </button>
+                </form>
+                <p className="text-[10px] text-gray-400 mt-1.5 px-0.5 leading-snug">
+                  Shows events from this moment on. Times are local to the location ({zoneLabel}).
+                </p>
+              </div>
+            )}
+          </div>
         </div>
-        <span className="text-xs text-gray-400">Photo planning, next 4 sunrises & sunsets</span>
+        <span className="text-xs text-gray-400">
+          {customDate
+            ? `Photo planning, 4 sunrises & sunsets after ${fmtDateTime(customDate, timeZone)}`
+            : "Photo planning, next 4 sunrises & sunsets"}
+          {lat !== null && ` · times in ${zoneLabel}`}
+        </span>
       </div>
 
       {lat === null && lng === null && !loading && (
@@ -913,6 +1109,12 @@ export default function GoldenHourCalculator() {
       {lat !== null && lng !== null && (
         <div className="space-y-0">
           {weatherLoading && <p className="text-gray-400 text-sm mb-8">Loading forecasts…</p>}
+          {beyondForecast && (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-8 text-center">
+              Forecasts only reach about {FORECAST_FUTURE_LIMIT_DAYS} days ahead (and ~3 months back), so weather,
+              fog, and cloud cover show as not available for some of these dates. Sun and moon times are still exact.
+            </p>
+          )}
           {days.map((day, i) => (
             <DayRow
               key={day.key}
@@ -920,6 +1122,9 @@ export default function GoldenHourCalculator() {
               items={day.items}
               fogAssessments={fogAssessments}
               pointWeatherByEvent={pointWeatherByEvent}
+              weatherLoading={weatherLoading}
+              referenceTime={referenceTime}
+              timeZone={timeZone}
               pinLat={lat}
               pinLng={lng}
               onPinMove={movePin}

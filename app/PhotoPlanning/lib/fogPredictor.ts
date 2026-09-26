@@ -3,6 +3,8 @@
 // the 3-source weather audit table, this is one synthesized indicator, not
 // a cross-check).
 
+import { fetchHourlyAt } from "./openMeteoHourly";
+
 export type FogInputs = {
   tempF: number | null;
   dewPointF: number | null;
@@ -25,51 +27,28 @@ export type FogAssessment = {
   inputs: FogInputs;
 };
 
-async function fetchFogInputs(lat: number, lng: number, targets: Date[]): Promise<FogInputs[]> {
-  const url =
-    "https://api.open-meteo.com/v1/forecast" +
-    `?latitude=${lat}&longitude=${lng}` +
-    "&hourly=temperature_2m,dew_point_2m,relative_humidity_2m,wind_speed_10m,cloud_cover" +
-    "&temperature_unit=fahrenheit&wind_speed_unit=mph" +
-    "&forecast_days=3&timezone=auto";
+async function fetchFogInputs(lat: number, lng: number, targets: Date[]): Promise<(FogInputs | null)[]> {
+  const rows = await fetchHourlyAt(
+    lat,
+    lng,
+    ["temperature_2m", "dew_point_2m", "relative_humidity_2m", "wind_speed_10m", "cloud_cover"],
+    targets,
+    "&temperature_unit=fahrenheit&wind_speed_unit=mph"
+  );
 
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Open-Meteo fog inputs request failed (${res.status})`);
-  }
-  const data = await res.json();
-
-  const hourlyTimes: Date[] = data.hourly.time.map((t: string) => new Date(t));
-  const temp: number[] = data.hourly.temperature_2m;
-  const dewPoint: number[] = data.hourly.dew_point_2m;
-  const humidity: number[] = data.hourly.relative_humidity_2m;
-  const wind: number[] = data.hourly.wind_speed_10m;
-  const cloudCover: number[] = data.hourly.cloud_cover;
-
-  function nearestIndex(target: Date): number {
-    let bestIdx = 0;
-    let bestDiff = Infinity;
-    for (let i = 0; i < hourlyTimes.length; i++) {
-      const diff = Math.abs(hourlyTimes[i].getTime() - target.getTime());
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        bestIdx = i;
-      }
-    }
-    return bestIdx;
-  }
-
-  return targets.map((target) => {
-    const idx = nearestIndex(target);
-    const t = temp[idx] ?? null;
-    const dp = dewPoint[idx] ?? null;
+  // No row = target outside the forecast's range; that's "not available",
+  // not "unlikely".
+  return rows.map((row) => {
+    if (!row) return null;
+    const t = row.temperature_2m;
+    const dp = row.dew_point_2m;
     return {
       tempF: t,
       dewPointF: dp,
       spreadF: t != null && dp != null ? t - dp : null,
-      relativeHumidity: humidity[idx] ?? null,
-      windSpeedMph: wind[idx] ?? null,
-      cloudCoverPercent: cloudCover[idx] ?? null,
+      relativeHumidity: row.relative_humidity_2m,
+      windSpeedMph: row.wind_speed_10m,
+      cloudCoverPercent: row.cloud_cover,
     };
   });
 }
@@ -145,7 +124,7 @@ export async function fetchFogAssessments(
   lat: number,
   lng: number,
   targets: Date[]
-): Promise<FogAssessment[]> {
+): Promise<(FogAssessment | null)[]> {
   const inputs = await fetchFogInputs(lat, lng, targets);
-  return inputs.map(assess);
+  return inputs.map((i) => (i ? assess(i) : null));
 }
