@@ -692,7 +692,6 @@ function EventTile({
               : null
           }
           cloudsLoading={weatherLoading}
-          bearingDeg={event.bearingDeg}
         />
       )}
       {event.timePoints && (

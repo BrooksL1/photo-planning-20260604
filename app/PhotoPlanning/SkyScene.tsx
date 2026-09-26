@@ -14,7 +14,6 @@ export type SkySceneProps = {
   moon?: { fraction: number; rotationDeg: number };
   clouds: { low: number | null; mid: number | null; high: number | null } | null;
   cloudsLoading: boolean;
-  bearingDeg?: number;
 };
 
 const W = 360;
@@ -52,12 +51,6 @@ const PALETTES = {
   sunset: { sky: ["#5d6fae", "#e2957e", "#f7b267"], ground: "#352f45", high: "#fff6ec", mid: "#f8e6dc", low: "#8f8797" },
   moon: { sky: ["#0c1330", "#1f2b55", "#34426f"], ground: "#0a0e20", high: "#aab3d6", mid: "#8c95bd", low: "#4c557c" },
 };
-
-// Standard 16-point compass abbreviation for a 0-360 bearing.
-function cardinal(deg: number): string {
-  const names = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
-  return names[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16];
-}
 
 // Lit part of a moon of radius r centered at the origin with the bright limb
 // pointing up: the top semicircle, closed by the terminator -- a half-ellipse
@@ -97,7 +90,7 @@ function RiseSetArrow({ rising, color }: { rising: boolean; color: string }) {
   return <path d={d} stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" fill="none" />;
 }
 
-export default function SkyScene({ body, rising, moon, clouds, cloudsLoading, bearingDeg }: SkySceneProps) {
+export default function SkyScene({ body, rising, moon, clouds, cloudsLoading }: SkySceneProps) {
   const uid = useId().replace(/:/g, "");
   const palette = body === "moon" ? PALETTES.moon : rising ? PALETTES.sunrise : PALETTES.sunset;
   const skyId = `sky-${uid}`;
@@ -199,11 +192,6 @@ export default function SkyScene({ body, rising, moon, clouds, cloudsLoading, be
         ))}
       </div>
 
-      {bearingDeg != null && (
-        <span className="absolute left-2 bottom-[3%] text-[10px] font-semibold text-white/85 whitespace-nowrap">
-          {rising ? "Rising" : "Setting"} · {cardinal(bearingDeg)} {Math.round(bearingDeg)}°
-        </span>
-      )}
     </div>
   );
 }
