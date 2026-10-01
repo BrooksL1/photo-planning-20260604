@@ -15,6 +15,8 @@ export type CurrentWeather = {
   cloudMid: number | null;
   cloudHigh: number | null;
   condition: string;
+  // Raw WMO code, for picking the weather glyph.
+  weatherCode: number | null;
   isDay: boolean;
 };
 
@@ -60,6 +62,7 @@ export async function fetchCurrentWeather(lat: number, lng: number): Promise<Cur
     cloudMid: c.cloud_cover_mid ?? null,
     cloudHigh: c.cloud_cover_high ?? null,
     condition: describeWeatherCode(c.weather_code ?? null),
+    weatherCode: c.weather_code ?? null,
     isDay: c.is_day === 1,
   };
 }

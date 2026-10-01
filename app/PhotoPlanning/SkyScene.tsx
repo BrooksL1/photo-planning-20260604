@@ -64,7 +64,7 @@ const PALETTES = {
 // Lit part of a moon of radius r centered at the origin with the bright limb
 // pointing up: the top semicircle, closed by the terminator -- a half-ellipse
 // that bulges toward the lit side for a crescent and away from it for a gibbous.
-function moonLitPath(fraction: number, r: number): string {
+export function moonLitPath(fraction: number, r: number): string {
   const ry = r * Math.abs(1 - 2 * fraction);
   const sweep = fraction < 0.5 ? 0 : 1;
   return `M ${-r} 0 A ${r} ${r} 0 0 1 ${r} 0 A ${r} ${ry} 0 0 ${sweep} ${-r} 0 Z`;
@@ -114,12 +114,13 @@ function EclipseDiscs() {
   );
 }
 
-// Diagonal arrow beside the body: up-right off a rising body's upper right,
-// down-left off a setting body's upper left. (bodyX, bodyY) is the body's center.
+// Diagonal arrow hinting at east-to-west travel: a rising body climbs up-right
+// off its upper right; a setting body's arrow comes in from its upper left and
+// points down-right into it. (bodyX, bodyY) is the body's center.
 function RiseSetArrow({ rising, bodyX, bodyY, color }: { rising: boolean; bodyX: number; bodyY: number; color: string }) {
   const [x1, y1, x2, y2] = rising
     ? [bodyX + 26, bodyY - 8, bodyX + 42, bodyY - 24]
-    : [bodyX - 26, bodyY - 24, bodyX - 42, bodyY - 8];
+    : [bodyX - 42, bodyY - 24, bodyX - 26, bodyY - 8];
   // Arrowhead: two 6-unit barbs swept back 35 degrees from the tip.
   const angle = Math.atan2(y2 - y1, x2 - x1);
   const barb = (offset: number) =>

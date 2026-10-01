@@ -13,6 +13,7 @@ import { destinationPoint, toCompassBearing } from "./lib/geo";
 import { fetchPointWeatherBatch, type PointReading } from "./lib/pointWeather";
 import { isWithinForecastRange, FORECAST_FUTURE_LIMIT_DAYS } from "./lib/openMeteoHourly";
 import SkyScene from "./SkyScene";
+import NowSky from "./NowSky";
 import { fetchCurrentWeather, type CurrentWeather } from "./lib/currentWeather";
 import {
   DEVICE_TIME_ZONE,
@@ -769,7 +770,17 @@ function EventTile({
 
 // Current conditions at the pin, shown above the next event when the planner
 // is on "Now" -- a quick sense of the sky before the forecasts below.
-function RightNowCard({ current, timeZone }: { current: CurrentWeather; timeZone: string }) {
+function RightNowCard({
+  current,
+  timeZone,
+  lat,
+  lng,
+}: {
+  current: CurrentWeather;
+  timeZone: string;
+  lat: number;
+  lng: number;
+}) {
   const layers = [
     { label: "High", value: current.cloudHigh },
     { label: "Mid", value: current.cloudMid },
@@ -784,15 +795,20 @@ function RightNowCard({ current, timeZone }: { current: CurrentWeather; timeZone
 
   return (
     <div className="mb-8 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-      <div className="min-w-0 sm:flex-1">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-indigo-500">
-          Right now · {fmt(current.observedAt, timeZone)}
+      <div className="flex items-center gap-3.5 min-w-0 sm:flex-1">
+        <div className="w-28 aspect-[120/72] shrink-0 rounded-lg overflow-hidden shadow-sm">
+          <NowSky lat={lat} lng={lng} at={new Date()} weatherCode={current.weatherCode} />
         </div>
-        <div className={`${SERIF} text-2xl font-bold text-gray-900 leading-tight mt-0.5`}>
-          {current.condition}
-          {current.tempF != null && ` · ${Math.round(current.tempF)}°F`}
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-indigo-500">
+            Right now · {fmt(current.observedAt, timeZone)}
+          </div>
+          <div className={`${SERIF} text-2xl font-bold text-gray-900 leading-tight mt-0.5`}>
+            {current.condition}
+            {current.tempF != null && ` · ${Math.round(current.tempF)}°F`}
+          </div>
+          {details.length > 0 && <div className="text-sm text-gray-600 mt-0.5">{details.join(" · ")}</div>}
         </div>
-        {details.length > 0 && <div className="text-sm text-gray-600 mt-0.5">{details.join(" · ")}</div>}
       </div>
       <div className="w-full sm:w-56 shrink-0 space-y-1.5">
         {layers.map((l) => (
@@ -1248,7 +1264,7 @@ export default function GoldenHourCalculator() {
               fog, and cloud cover show as not available for some of these dates. Sun and moon times are still exact.
             </p>
           )}
-          {!customTime && currentWeather && <RightNowCard current={currentWeather} timeZone={timeZone} />}
+          {!customTime && currentWeather && <RightNowCard current={currentWeather} timeZone={timeZone} lat={lat} lng={lng} />}
           {days.map((day, i) => (
             <DayRow
               key={day.key}
