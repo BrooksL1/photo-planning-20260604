@@ -9,7 +9,8 @@ import { useId } from "react";
 export type SkySceneProps = {
   // "meteor"/"eclipse" draw a plain night sky with the event's glyph, so
   // celestial tiles keep the same image block as sun/moon tiles.
-  body: "sun" | "moon" | "meteor" | "eclipse";
+  // "none" = just sky (e.g. right now, at night with the moon down).
+  body: "sun" | "moon" | "meteor" | "eclipse" | "none";
   rising: boolean;
   // 0-1 illuminated fraction, plus the on-screen rotation (degrees clockwise)
   // that turns the bright limb from "straight up" to where it really points.
@@ -19,7 +20,17 @@ export type SkySceneProps = {
   // Small pill overlaid top-left (e.g. "Just passed · 12 min ago"). Lives on
   // the image so it never changes the tile's layout.
   badge?: string;
+  // "Right now" mode: 0-1 share of the body's time above the horizon that has
+  // passed. The body is placed along a dotted east-to-west arc at that point
+  // (0 = rising at the left horizon, 0.5 = top, 1 = setting at the right)
+  // instead of on the horizon, and the rise/set arrow is omitted.
+  arc?: number;
+  // Overrides the sky palette (default comes from body + rising).
+  sky?: SkyKind;
+  className?: string;
 };
+
+export type SkyKind = "sunrise" | "sunset" | "day" | "night";
 
 const W = 360;
 const H = 100;
@@ -55,35 +66,58 @@ function veilOpacity(percent: number | null): number {
   return Math.max(0, (percent - 40) / 60) * 0.75;
 }
 
+// Right-now arc: elliptical path from the east horizon to the west, ending
+// short of the cloud % labels on the right edge.
+const ARC_CX = 160;
+const ARC_RX = 120;
+const ARC_RY = 52;
+
+function arcPoint(f: number): { x: number; y: number } {
+  const t = Math.PI * Math.max(0, Math.min(1, f));
+  return { x: ARC_CX - ARC_RX * Math.cos(t), y: HORIZON_Y - ARC_RY * Math.sin(t) };
+}
+
 const PALETTES = {
   sunrise: { sky: ["#8fb0dc", "#f4c9a8", "#ffdca8"], ground: "#3a3f55", high: "#ffffff", mid: "#fbf4ee", low: "#9da3b3" },
   sunset: { sky: ["#5d6fae", "#e2957e", "#f7b267"], ground: "#352f45", high: "#fff6ec", mid: "#f8e6dc", low: "#8f8797" },
+  day: { sky: ["#6f9fdc", "#a9c9ee", "#d3e3f5"], ground: "#3a3f55", high: "#ffffff", mid: "#f4f6fb", low: "#9aa3b5" },
   moon: { sky: ["#0c1330", "#1f2b55", "#34426f"], ground: "#0a0e20", high: "#aab3d6", mid: "#8c95bd", low: "#4c557c" },
 };
 
 // Lit part of a moon of radius r centered at the origin with the bright limb
 // pointing up: the top semicircle, closed by the terminator -- a half-ellipse
 // that bulges toward the lit side for a crescent and away from it for a gibbous.
-export function moonLitPath(fraction: number, r: number): string {
+function moonLitPath(fraction: number, r: number): string {
   const ry = r * Math.abs(1 - 2 * fraction);
   const sweep = fraction < 0.5 ? 0 : 1;
   return `M ${-r} 0 A ${r} ${r} 0 0 1 ${r} 0 A ${r} ${ry} 0 0 ${sweep} ${-r} 0 Z`;
 }
 
-function Sun({ x, glowId, diskId }: { x: number; glowId: string; diskId: string }) {
+function Sun({ x, cy = HORIZON_Y, glowId, diskId }: { x: number; cy?: number; glowId: string; diskId: string }) {
   return (
     <g>
-      <circle cx={x} cy={HORIZON_Y} r={46} fill={`url(#${glowId})`} />
-      <circle cx={x} cy={HORIZON_Y} r={21} fill={`url(#${diskId})`} />
+      <circle cx={x} cy={cy} r={46} fill={`url(#${glowId})`} />
+      <circle cx={x} cy={cy} r={21} fill={`url(#${diskId})`} />
     </g>
   );
 }
 
 const MOON_CY = 50;
 
-function Moon({ x, fraction, rotationDeg, glowId }: { x: number; fraction: number; rotationDeg: number; glowId: string }) {
+function Moon({
+  x,
+  cy = MOON_CY,
+  fraction,
+  rotationDeg,
+  glowId,
+}: {
+  x: number;
+  cy?: number;
+  fraction: number;
+  rotationDeg: number;
+  glowId: string;
+}) {
   const r = 22;
-  const cy = MOON_CY;
   return (
     <g>
       <circle cx={x} cy={cy} r={42} fill={`url(#${glowId})`} opacity={0.35 + 0.65 * fraction} />
@@ -130,14 +164,26 @@ function RiseSetArrow({ rising, bodyX, bodyY, color }: { rising: boolean; bodyX:
   return <path d={d} stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" fill="none" />;
 }
 
-export default function SkyScene({ body, rising, moon, clouds, cloudsLoading, badge }: SkySceneProps) {
+export default function SkyScene({
+  body,
+  rising,
+  moon,
+  clouds,
+  cloudsLoading,
+  badge,
+  arc,
+  sky,
+  className = "mt-3 mb-1",
+}: SkySceneProps) {
   const uid = useId().replace(/:/g, "");
-  const palette = body !== "sun" ? PALETTES.moon : rising ? PALETTES.sunrise : PALETTES.sunset;
+  const skyKind: SkyKind = sky ?? (body !== "sun" ? "night" : rising ? "sunrise" : "sunset");
+  const palette = skyKind === "night" ? PALETTES.moon : PALETTES[skyKind];
   const skyId = `sky-${uid}`;
   const glowId = `glow-${uid}`;
   const diskId = `disk-${uid}`;
-  const dark = body !== "sun";
-  const bodyX = rising ? RISE_X : SET_X;
+  const dark = skyKind === "night";
+  const onArc = arc != null ? arcPoint(arc) : null;
+  const bodyX = onArc ? onArc.x : rising ? RISE_X : SET_X;
 
   const layers: { key: "high" | "mid" | "low"; label: string; value: number | null; topPct: number }[] = [
     { key: "high", label: "High", value: clouds?.high ?? null, topPct: 20 },
@@ -148,7 +194,7 @@ export default function SkyScene({ body, rising, moon, clouds, cloudsLoading, ba
   const pillClass = dark ? "bg-black/40 text-white/90" : "bg-white/75 text-gray-700";
 
   return (
-    <div className="relative w-full aspect-[360/100] rounded-lg overflow-hidden mt-3 mb-1">
+    <div className={`relative w-full aspect-[360/100] rounded-lg overflow-hidden ${className}`}>
       <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 w-full h-full" aria-hidden>
         <defs>
           <linearGradient id={skyId} x1="0" y1="0" x2="0" y2="1">
@@ -181,9 +227,26 @@ export default function SkyScene({ body, rising, moon, clouds, cloudsLoading, ba
             [52, 58],
           ].map(([x, y], i) => <circle key={i} cx={x} cy={y} r={0.9} fill="#ffffff" opacity={0.7} />)}
 
-        {body === "sun" && <Sun x={bodyX} glowId={glowId} diskId={diskId} />}
+        {onArc && (
+          <path
+            d={`M ${ARC_CX - ARC_RX} ${HORIZON_Y} A ${ARC_RX} ${ARC_RY} 0 0 1 ${ARC_CX + ARC_RX} ${HORIZON_Y}`}
+            fill="none"
+            stroke="#ffffff"
+            strokeOpacity={dark ? 0.3 : 0.6}
+            strokeWidth={1.2}
+            strokeDasharray="2 4"
+            strokeLinecap="round"
+          />
+        )}
+        {body === "sun" && <Sun x={bodyX} cy={onArc?.y} glowId={glowId} diskId={diskId} />}
         {body === "moon" && (
-          <Moon x={bodyX} fraction={moon?.fraction ?? 0.5} rotationDeg={moon?.rotationDeg ?? 0} glowId={glowId} />
+          <Moon
+            x={bodyX}
+            cy={onArc?.y}
+            fraction={moon?.fraction ?? 0.5}
+            rotationDeg={moon?.rotationDeg ?? 0}
+            glowId={glowId}
+          />
         )}
         {body === "meteor" && <MeteorStreaks />}
         {body === "eclipse" && <EclipseDiscs />}
@@ -219,7 +282,7 @@ export default function SkyScene({ body, rising, moon, clouds, cloudsLoading, ba
           </g>
         ))}
 
-        {(body === "sun" || body === "moon") && (
+        {!onArc && (body === "sun" || body === "moon") && (
           <RiseSetArrow
             rising={rising}
             bodyX={bodyX}

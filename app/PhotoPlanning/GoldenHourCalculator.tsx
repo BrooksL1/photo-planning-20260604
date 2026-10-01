@@ -13,7 +13,7 @@ import { destinationPoint, toCompassBearing } from "./lib/geo";
 import { fetchPointWeatherBatch, type PointReading } from "./lib/pointWeather";
 import { isWithinForecastRange, FORECAST_FUTURE_LIMIT_DAYS } from "./lib/openMeteoHourly";
 import SkyScene from "./SkyScene";
-import NowSky from "./NowSky";
+import { skyNow } from "./lib/skyNow";
 import { fetchCurrentWeather, type CurrentWeather } from "./lib/currentWeather";
 import {
   DEVICE_TIME_ZONE,
@@ -786,11 +786,7 @@ function RightNowCard({
   lat: number;
   lng: number;
 }) {
-  const layers = [
-    { label: "High", value: current.cloudHigh },
-    { label: "Mid", value: current.cloudMid },
-    { label: "Low", value: current.cloudLow },
-  ];
+  const now = skyNow(lat, lng);
   const details = [
     current.relativeHumidity != null ? `${Math.round(current.relativeHumidity)}% humidity` : null,
     current.windSpeedMph != null ? `${Math.round(current.windSpeedMph)} mph wind` : null,
@@ -798,33 +794,31 @@ function RightNowCard({
     current.precipitationIn != null && current.precipitationIn > 0 ? `${current.precipitationIn.toFixed(2)} in precip` : null,
   ].filter(Boolean);
 
+  // Same sky image as the event tiles (same size on desktop), with the sun or
+  // moon placed along its arc for the current moment.
   return (
-    <div className="mb-8 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-      <div className="flex items-center gap-3.5 min-w-0 sm:flex-1">
-        <div className="w-28 aspect-[120/72] shrink-0 rounded-lg overflow-hidden shadow-sm">
-          <NowSky lat={lat} lng={lng} at={new Date()} weatherCode={current.weatherCode} />
-        </div>
-        <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-indigo-500">
-            Right now · {fmt(current.observedAt, timeZone)}
-          </div>
-          <div className={`${SERIF} text-2xl font-bold text-gray-900 leading-tight mt-0.5`}>
-            {current.condition}
-            {current.tempF != null && ` · ${Math.round(current.tempF)}°F`}
-          </div>
-          {details.length > 0 && <div className="text-sm text-gray-600 mt-0.5">{details.join(" · ")}</div>}
-        </div>
+    <div className="mb-8 rounded-xl border border-indigo-100 bg-indigo-50/60 p-[11px] flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
+      <div className="w-full sm:w-[304px] shrink-0">
+        <SkyScene
+          body={now.body}
+          rising
+          moon={now.moon}
+          arc={now.arc}
+          sky={now.sky}
+          clouds={{ low: current.cloudLow, mid: current.cloudMid, high: current.cloudHigh }}
+          cloudsLoading={false}
+          className=""
+        />
       </div>
-      <div className="w-full sm:w-56 shrink-0 space-y-1.5">
-        {layers.map((l) => (
-          <div key={l.label} className="flex items-center gap-2 text-xs">
-            <span className="w-8 text-gray-500 font-medium">{l.label}</span>
-            <div className="flex-1 h-2 rounded-full bg-white overflow-hidden">
-              <div className="h-full rounded-full bg-indigo-400" style={{ width: `${Math.max(0, Math.min(100, l.value ?? 0))}%` }} />
-            </div>
-            <span className="w-9 text-right font-semibold text-gray-800">{l.value != null ? `${Math.round(l.value)}%` : "n/a"}</span>
-          </div>
-        ))}
+      <div className="min-w-0">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-indigo-500">
+          Right now · {fmt(current.observedAt, timeZone)}
+        </div>
+        <div className={`${SERIF} text-2xl font-bold text-gray-900 leading-tight mt-0.5`}>
+          {current.condition}
+          {current.tempF != null && ` · ${Math.round(current.tempF)}°F`}
+        </div>
+        {details.length > 0 && <div className="text-sm text-gray-600 mt-0.5">{details.join(" · ")}</div>}
       </div>
     </div>
   );
