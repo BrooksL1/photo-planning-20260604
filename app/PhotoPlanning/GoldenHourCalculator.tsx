@@ -13,6 +13,7 @@ import { destinationPoint, toCompassBearing } from "./lib/geo";
 import { fetchPointWeatherBatch, type PointReading } from "./lib/pointWeather";
 import { isWithinForecastRange, FORECAST_FUTURE_LIMIT_DAYS } from "./lib/openMeteoHourly";
 import SkyScene from "./SkyScene";
+import { fetchCurrentWeather, type CurrentWeather } from "./lib/currentWeather";
 import {
   DEVICE_TIME_ZONE,
   fetchTimeZone,
@@ -766,6 +767,48 @@ function EventTile({
   );
 }
 
+// Current conditions at the pin, shown above the next event when the planner
+// is on "Now" -- a quick sense of the sky before the forecasts below.
+function RightNowCard({ current, timeZone }: { current: CurrentWeather; timeZone: string }) {
+  const layers = [
+    { label: "High", value: current.cloudHigh },
+    { label: "Mid", value: current.cloudMid },
+    { label: "Low", value: current.cloudLow },
+  ];
+  const details = [
+    current.relativeHumidity != null ? `${Math.round(current.relativeHumidity)}% humidity` : null,
+    current.windSpeedMph != null ? `${Math.round(current.windSpeedMph)} mph wind` : null,
+    current.visibilityMiles != null ? `${fmtMiles(current.visibilityMiles)} visibility` : null,
+    current.precipitationIn != null && current.precipitationIn > 0 ? `${current.precipitationIn.toFixed(2)} in precip` : null,
+  ].filter(Boolean);
+
+  return (
+    <div className="mb-8 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+      <div className="min-w-0 sm:flex-1">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-indigo-500">
+          Right now · {fmt(current.observedAt, timeZone)}
+        </div>
+        <div className={`${SERIF} text-2xl font-bold text-gray-900 leading-tight mt-0.5`}>
+          {current.condition}
+          {current.tempF != null && ` · ${Math.round(current.tempF)}°F`}
+        </div>
+        {details.length > 0 && <div className="text-sm text-gray-600 mt-0.5">{details.join(" · ")}</div>}
+      </div>
+      <div className="w-full sm:w-56 shrink-0 space-y-1.5">
+        {layers.map((l) => (
+          <div key={l.label} className="flex items-center gap-2 text-xs">
+            <span className="w-8 text-gray-500 font-medium">{l.label}</span>
+            <div className="flex-1 h-2 rounded-full bg-white overflow-hidden">
+              <div className="h-full rounded-full bg-indigo-400" style={{ width: `${Math.max(0, Math.min(100, l.value ?? 0))}%` }} />
+            </div>
+            <span className="w-9 text-right font-semibold text-gray-800">{l.value != null ? `${Math.round(l.value)}%` : "n/a"}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DayRow({
   label,
   relative,
@@ -868,6 +911,7 @@ export default function GoldenHourCalculator() {
   const [timeOpen, setTimeOpen] = useState(false);
   const [timeDraft, setTimeDraft] = useState("");
   const timePopoverRef = useRef<HTMLDivElement>(null);
+  const [currentWeather, setCurrentWeather] = useState<CurrentWeather | null>(null);
   // The moment the current tiles were computed for ("just passed" is measured against it).
   const [referenceTime, setReferenceTime] = useState<Date>(() => new Date());
 
@@ -941,6 +985,27 @@ export default function GoldenHourCalculator() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [locationOpen]);
+
+  // Right-now conditions: fetched for the pin and refreshed every 10 minutes
+  // while the page stays open.
+  useEffect(() => {
+    if (lat === null || lng === null) return;
+    let cancelled = false;
+    const load = () =>
+      fetchCurrentWeather(lat, lng)
+        .then((c) => {
+          if (!cancelled) setCurrentWeather(c);
+        })
+        .catch(() => {
+          if (!cancelled) setCurrentWeather(null);
+        });
+    load();
+    const handle = setInterval(load, 10 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(handle);
+    };
+  }, [lat, lng]);
 
   useEffect(() => {
     if (!timeOpen) return;
@@ -1183,6 +1248,7 @@ export default function GoldenHourCalculator() {
               fog, and cloud cover show as not available for some of these dates. Sun and moon times are still exact.
             </p>
           )}
+          {!customTime && currentWeather && <RightNowCard current={currentWeather} timeZone={timeZone} />}
           {days.map((day, i) => (
             <DayRow
               key={day.key}
