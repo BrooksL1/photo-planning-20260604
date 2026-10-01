@@ -25,6 +25,10 @@ const W = 360;
 const H = 100;
 const HORIZON_Y = 80;
 const BODY_X = 118;
+// Rising bodies sit left and climb up-right; setting bodies sit right and sink
+// down-left. The set position stays clear of the cloud % labels on the right edge.
+const RISE_X = 78;
+const SET_X = 240;
 
 // Fixed shuffled slot order, so 10% cover = the first slot, 20% = first two,
 // etc. -- clouds spread across the sky rather than piling up on one side.
@@ -66,23 +70,25 @@ function moonLitPath(fraction: number, r: number): string {
   return `M ${-r} 0 A ${r} ${r} 0 0 1 ${r} 0 A ${r} ${ry} 0 0 ${sweep} ${-r} 0 Z`;
 }
 
-function Sun({ glowId, diskId }: { glowId: string; diskId: string }) {
+function Sun({ x, glowId, diskId }: { x: number; glowId: string; diskId: string }) {
   return (
     <g>
-      <circle cx={BODY_X} cy={HORIZON_Y} r={46} fill={`url(#${glowId})`} />
-      <circle cx={BODY_X} cy={HORIZON_Y} r={21} fill={`url(#${diskId})`} />
+      <circle cx={x} cy={HORIZON_Y} r={46} fill={`url(#${glowId})`} />
+      <circle cx={x} cy={HORIZON_Y} r={21} fill={`url(#${diskId})`} />
     </g>
   );
 }
 
-function Moon({ fraction, rotationDeg, glowId }: { fraction: number; rotationDeg: number; glowId: string }) {
+const MOON_CY = 50;
+
+function Moon({ x, fraction, rotationDeg, glowId }: { x: number; fraction: number; rotationDeg: number; glowId: string }) {
   const r = 22;
-  const cy = 50;
+  const cy = MOON_CY;
   return (
     <g>
-      <circle cx={BODY_X} cy={cy} r={42} fill={`url(#${glowId})`} opacity={0.35 + 0.65 * fraction} />
-      <circle cx={BODY_X} cy={cy} r={r} fill="#232c4f" stroke="#ffffff" strokeOpacity={0.18} strokeWidth={0.8} />
-      <g transform={`translate(${BODY_X} ${cy}) rotate(${rotationDeg})`}>
+      <circle cx={x} cy={cy} r={42} fill={`url(#${glowId})`} opacity={0.35 + 0.65 * fraction} />
+      <circle cx={x} cy={cy} r={r} fill="#232c4f" stroke="#ffffff" strokeOpacity={0.18} strokeWidth={0.8} />
+      <g transform={`translate(${x} ${cy}) rotate(${rotationDeg})`}>
         <path d={moonLitPath(fraction, r)} fill="#f4f1e4" />
       </g>
     </g>
@@ -108,9 +114,18 @@ function EclipseDiscs() {
   );
 }
 
-function RiseSetArrow({ rising, color }: { rising: boolean; color: string }) {
-  const x = BODY_X + 40;
-  const d = rising ? `M ${x} 70 V 50 M ${x - 5} 55 L ${x} 50 L ${x + 5} 55` : `M ${x} 50 V 70 M ${x - 5} 65 L ${x} 70 L ${x + 5} 65`;
+// Diagonal arrow beside the body: up-right off a rising body's upper right,
+// down-left off a setting body's upper left. (bodyX, bodyY) is the body's center.
+function RiseSetArrow({ rising, bodyX, bodyY, color }: { rising: boolean; bodyX: number; bodyY: number; color: string }) {
+  const [x1, y1, x2, y2] = rising
+    ? [bodyX + 26, bodyY - 8, bodyX + 42, bodyY - 24]
+    : [bodyX - 26, bodyY - 24, bodyX - 42, bodyY - 8];
+  // Arrowhead: two 6-unit barbs swept back 35 degrees from the tip.
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const barb = (offset: number) =>
+    `${x2 - 6 * Math.cos(angle + offset)} ${y2 - 6 * Math.sin(angle + offset)}`;
+  const spread = (35 * Math.PI) / 180;
+  const d = `M ${x1} ${y1} L ${x2} ${y2} M ${barb(spread)} L ${x2} ${y2} L ${barb(-spread)}`;
   return <path d={d} stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" fill="none" />;
 }
 
@@ -121,6 +136,7 @@ export default function SkyScene({ body, rising, moon, clouds, cloudsLoading, ba
   const glowId = `glow-${uid}`;
   const diskId = `disk-${uid}`;
   const dark = body !== "sun";
+  const bodyX = rising ? RISE_X : SET_X;
 
   const layers: { key: "high" | "mid" | "low"; label: string; value: number | null; topPct: number }[] = [
     { key: "high", label: "High", value: clouds?.high ?? null, topPct: 20 },
@@ -164,9 +180,9 @@ export default function SkyScene({ body, rising, moon, clouds, cloudsLoading, ba
             [52, 58],
           ].map(([x, y], i) => <circle key={i} cx={x} cy={y} r={0.9} fill="#ffffff" opacity={0.7} />)}
 
-        {body === "sun" && <Sun glowId={glowId} diskId={diskId} />}
+        {body === "sun" && <Sun x={bodyX} glowId={glowId} diskId={diskId} />}
         {body === "moon" && (
-          <Moon fraction={moon?.fraction ?? 0.5} rotationDeg={moon?.rotationDeg ?? 0} glowId={glowId} />
+          <Moon x={bodyX} fraction={moon?.fraction ?? 0.5} rotationDeg={moon?.rotationDeg ?? 0} glowId={glowId} />
         )}
         {body === "meteor" && <MeteorStreaks />}
         {body === "eclipse" && <EclipseDiscs />}
@@ -202,7 +218,14 @@ export default function SkyScene({ body, rising, moon, clouds, cloudsLoading, ba
           </g>
         ))}
 
-        {(body === "sun" || body === "moon") && <RiseSetArrow rising={rising} color={dark ? "#dfe4ff" : "#ffffff"} />}
+        {(body === "sun" || body === "moon") && (
+          <RiseSetArrow
+            rising={rising}
+            bodyX={bodyX}
+            bodyY={body === "sun" ? HORIZON_Y : MOON_CY}
+            color={dark ? "#dfe4ff" : "#ffffff"}
+          />
+        )}
       </svg>
 
       {badge && (
