@@ -669,13 +669,18 @@ function EventTile({
   const isMoon = event.kind === "Moonrise" || event.kind === "Moonset";
   const potential = isMoon ? computeMoonPotential(pointWeather) : computePotential(pointWeather, fog);
   const sceneBody = isSun ? "sun" : isMoon ? "moon" : event.kind === "Eclipse" ? "eclipse" : "meteor";
+  // Tint: pale red-orange for sun events, pale navy for moon and night-sky
+  // (meteor/eclipse) events. Same padding everywhere so rows stay aligned.
+  const tint = isSun ? "bg-[#fdeee6]" : "bg-[#e7ebf5]";
 
   // Every section below has a fixed height and never wraps, so tiles side by
   // side line up row-for-row no matter which event type, badge, or loading
   // state they're in. Anything optional (e.g. "Just passed") is overlaid on
   // the image instead of taking up layout space.
   return (
-    <div className={`border-t-[3px] ${justPassed ? "border-gray-300" : "border-indigo-500"} pt-4`}>
+    <div
+      className={`border-t-[3px] ${justPassed ? "border-gray-300" : "border-indigo-500"} ${tint} rounded-b-xl px-3 pt-4 pb-3`}
+    >
       <div className="flex items-center gap-2 h-7 min-w-0">
         <EventIcon kind={event.kind} />
         <div className={`${SERIF} text-lg font-semibold text-gray-900 whitespace-nowrap truncate min-w-0`}>
