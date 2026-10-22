@@ -15,6 +15,8 @@ import { isWithinForecastRange, FORECAST_FUTURE_LIMIT_DAYS } from "./lib/openMet
 import SkyScene from "./SkyScene";
 import { skyNow } from "./lib/skyNow";
 import { fetchCurrentWeather, type CurrentWeather } from "./lib/currentWeather";
+import LiveSky, { MetarPanel } from "./LiveSky";
+import { fetchNearbyMetars, isRecentEvent, observationForEvent, type MetarObservation } from "./lib/metar";
 import {
   DEVICE_TIME_ZONE,
   fetchTimeZone,
@@ -652,6 +654,11 @@ function EventTile({
   referenceTime,
   timeZone,
   onPinMove,
+  observations,
+  observationsLoading,
+  observationsUnavailable,
+  liveTime,
+  predictionCalculatedAt,
 }: {
   event: UnifiedEvent;
   fog: FogAssessment | null;
@@ -662,6 +669,11 @@ function EventTile({
   referenceTime: Date;
   timeZone: string;
   onPinMove: (lat: number, lng: number) => void;
+  observations: MetarObservation[];
+  observationsLoading: boolean;
+  observationsUnavailable: boolean;
+  liveTime: Date;
+  predictionCalculatedAt: Date | null;
 }) {
   const minutesAgo = Math.floor((referenceTime.getTime() - event.primaryTime.getTime()) / 60000);
   const justPassed = minutesAgo >= 0;
@@ -679,7 +691,7 @@ function EventTile({
   // the image instead of taking up layout space.
   return (
     <div
-      className={`border-t-[3px] ${justPassed ? "border-gray-300" : "border-indigo-500"} ${tint} rounded-b-xl px-3 pt-4 pb-3`}
+      className={`border-t-[3px] ${justPassed ? "border-gray-300" : "border-indigo-500"} ${tint} rounded-b-xl px-3 pt-4 pb-3 flex flex-col`}
     >
       <div className="flex items-center gap-2 h-7 min-w-0">
         <EventIcon kind={event.kind} />
@@ -769,6 +781,18 @@ function EventTile({
           {event.bearingDeg != null ? `Pin · arrow toward ${eventDirectionLabel(event.kind)}, 20mi` : "Pin · your location"}
         </div>
       </div>
+      {isRecentEvent(event.primaryTime, liveTime) && <div className="mt-3">
+        <MetarPanel observation={observationForEvent(observations, event.primaryTime, liveTime)} timeZone={timeZone} loading={observationsLoading} unavailable={observationsUnavailable} />
+      </div>}
+      <div className="mt-auto pt-3 text-[10px] leading-relaxed text-gray-500 border-t border-black/5">
+        {potential && predictionCalculatedAt && <div title="Time this app calculated the potential using the retrieved forecast and fog data; not the weather model's issue time.">
+          Prediction calculated · {fmtDateTime(predictionCalculatedAt, timeZone)} {timeZoneAbbreviation(predictionCalculatedAt, timeZone)}
+        </div>}
+        <div>{pointWeather?.tip.fetchedAt
+          ? `Forecast checked · ${fmtDateTime(pointWeather.tip.fetchedAt, timeZone)} ${timeZoneAbbreviation(pointWeather.tip.fetchedAt, timeZone)}`
+          : weatherLoading ? "Checking forecast…" : "Forecast unavailable"}</div>
+        {pointWeather?.tip.forecastAt && <div>Cloud estimate for {fmt(pointWeather.tip.forecastAt, timeZone)} · {event.bearingDeg != null ? "20 mi toward event" : "at pin"}</div>}
+      </div>
     </div>
   );
 }
@@ -780,11 +804,17 @@ function RightNowCard({
   timeZone,
   lat,
   lng,
+  observation,
+  observationsLoading,
+  observationsUnavailable,
 }: {
   current: CurrentWeather;
   timeZone: string;
   lat: number;
   lng: number;
+  observation: MetarObservation | null;
+  observationsLoading: boolean;
+  observationsUnavailable: boolean;
 }) {
   const now = skyNow(lat, lng);
   const details = [
@@ -819,6 +849,9 @@ function RightNowCard({
           {current.tempF != null && ` · ${Math.round(current.tempF)}°F`}
         </div>
         {details.length > 0 && <div className="text-sm text-gray-600 mt-0.5">{details.join(" · ")}</div>}
+        <p className="mt-1 text-xs text-gray-500">Weather model estimate at your pin</p>
+        <div className="mt-3"><MetarPanel observation={observation} timeZone={timeZone} loading={observationsLoading} unavailable={observationsUnavailable} /></div>
+        <p className="mt-2 text-[10px] text-gray-500">Forecast checked · {fmtDateTime(current.fetchedAt, timeZone)} {timeZoneAbbreviation(current.fetchedAt, timeZone)}</p>
       </div>
     </div>
   );
@@ -837,6 +870,11 @@ function DayRow({
   pinLng,
   onPinMove,
   showDivider,
+  observations,
+  observationsLoading,
+  observationsUnavailable,
+  liveTime,
+  predictionCalculatedAt,
 }: {
   label: string;
   relative: string;
@@ -850,6 +888,11 @@ function DayRow({
   pinLng: number;
   onPinMove: (lat: number, lng: number) => void;
   showDivider: boolean;
+  observations: MetarObservation[];
+  observationsLoading: boolean;
+  observationsUnavailable: boolean;
+  liveTime: Date;
+  predictionCalculatedAt: Date | null;
 }) {
   const useSlider = items.length > 3;
 
@@ -865,6 +908,11 @@ function DayRow({
       referenceTime={referenceTime}
       timeZone={timeZone}
       onPinMove={onPinMove}
+      observations={observations}
+      observationsLoading={observationsLoading}
+      observationsUnavailable={observationsUnavailable}
+      liveTime={liveTime}
+      predictionCalculatedAt={predictionCalculatedAt}
     />
   );
 
@@ -927,6 +975,12 @@ export default function GoldenHourCalculator() {
   const [timeDraft, setTimeDraft] = useState("");
   const timePopoverRef = useRef<HTMLDivElement>(null);
   const [currentWeather, setCurrentWeather] = useState<CurrentWeather | null>(null);
+  const [observations, setObservations] = useState<MetarObservation[]>([]);
+  const [observationsLoading, setObservationsLoading] = useState(false);
+  const [observationsUnavailable, setObservationsUnavailable] = useState(false);
+  const [predictionCalculatedAt, setPredictionCalculatedAt] = useState<Date | null>(null);
+  const [weatherRefresh, setWeatherRefresh] = useState(0);
+  const [liveTime, setLiveTime] = useState<Date>(() => new Date());
   // The moment the current tiles were computed for ("just passed" is measured against it).
   const [referenceTime, setReferenceTime] = useState<Date>(() => new Date());
 
@@ -1001,8 +1055,29 @@ export default function GoldenHourCalculator() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [locationOpen]);
 
-  // Right-now conditions: fetched for the pin and refreshed every 10 minutes
-  // while the page stays open.
+  // Refresh all weather together, including when returning from a suspended
+  // mobile tab. Throttle focus/visibility events so they cannot flood the API.
+  useEffect(() => {
+    let lastRefresh = Date.now();
+    const refresh = () => {
+      if (document.visibilityState !== "visible" || Date.now() - lastRefresh < 60000) return;
+      lastRefresh = Date.now();
+      setWeatherRefresh((value) => value + 1);
+      setLiveTime(new Date());
+    };
+    const weatherTimer = setInterval(refresh, 10 * 60 * 1000);
+    const clockTimer = setInterval(() => setLiveTime(new Date()), 60000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(weatherTimer);
+      clearInterval(clockTimer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
+  // Right-now conditions at the pin.
   useEffect(() => {
     if (lat === null || lng === null) return;
     let cancelled = false;
@@ -1015,12 +1090,24 @@ export default function GoldenHourCalculator() {
           if (!cancelled) setCurrentWeather(null);
         });
     load();
-    const handle = setInterval(load, 10 * 60 * 1000);
     return () => {
       cancelled = true;
-      clearInterval(handle);
     };
-  }, [lat, lng]);
+  }, [lat, lng, weatherRefresh]);
+
+  useEffect(() => {
+    if (lat === null || lng === null) return;
+    const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clear observations from the previous request/location
+    setObservations([]);
+    setObservationsLoading(true);
+    setObservationsUnavailable(false);
+    fetchNearbyMetars(lat, lng, controller.signal)
+      .then((reports) => { if (!controller.signal.aborted) setObservations(reports); })
+      .catch(() => { if (!controller.signal.aborted) setObservationsUnavailable(true); })
+      .finally(() => { if (!controller.signal.aborted) setObservationsLoading(false); });
+    return () => controller.abort();
+  }, [lat, lng, weatherRefresh]);
 
   useEffect(() => {
     if (!timeOpen) return;
@@ -1094,6 +1181,7 @@ export default function GoldenHourCalculator() {
       setUnifiedEvents(combined);
       setFogAssessments(combined.map(() => null));
       setPointWeatherByEvent(combined.map(() => null));
+      setPredictionCalculatedAt(null);
 
       if (combined.length === 0) return;
       const targets = combined.map((e) => e.primaryTime);
@@ -1102,25 +1190,20 @@ export default function GoldenHourCalculator() {
       // One batched request for every tile: the pin reading plus the point
       // 20mi toward the event (events with no direction reuse the pin).
       const tips = combined.map((e) => (e.bearingDeg != null ? destinationPoint(lat, lng, e.bearingDeg, 20) : { lat, lng }));
-      fetchPointWeatherBatch([
+      const weatherPromise = fetchPointWeatherBatch([
         ...combined.map((e) => ({ lat, lng, target: e.primaryTime })),
         ...combined.map((e, i) => ({ lat: tips[i].lat, lng: tips[i].lng, target: e.primaryTime })),
       ])
         .then((readings) => combined.map((_, i) => ({ pin: readings[i], tip: readings[combined.length + i] })))
-        .catch(() => combined.map(() => null))
-        .then((pairs) => {
-          if (cancelled) return;
-          setPointWeatherByEvent(pairs);
-          setWeatherLoading(false);
-        });
-
-      fetchFogAssessments(lat, lng, targets)
-        .then((fog) => {
-          if (!cancelled) setFogAssessments(fog);
-        })
-        .catch(() => {
-          if (!cancelled) setFogAssessments(targets.map(() => null));
-        });
+        .catch(() => combined.map(() => null));
+      const fogPromise = fetchFogAssessments(lat, lng, targets).catch(() => targets.map(() => null));
+      Promise.all([weatherPromise, fogPromise]).then(([pairs, fog]) => {
+        if (cancelled) return;
+        setPointWeatherByEvent(pairs);
+        setFogAssessments(fog);
+        setPredictionCalculatedAt(new Date());
+        setWeatherLoading(false);
+      });
     }
 
     // The zone is needed before anything else: it decides what instant a
@@ -1132,7 +1215,7 @@ export default function GoldenHourCalculator() {
     return () => {
       cancelled = true;
     };
-  }, [lat, lng, customTime]);
+  }, [lat, lng, customTime, weatherRefresh]);
 
   const days = groupByDay(unifiedEvents, timeZone);
   const customDate = customTime ? wallTimeStringToDate(customTime, timeZone) : null;
@@ -1263,7 +1346,13 @@ export default function GoldenHourCalculator() {
               fog, and cloud cover show as not available for some of these dates. Sun and moon times are still exact.
             </p>
           )}
-          {!customTime && currentWeather && <RightNowCard current={currentWeather} timeZone={timeZone} lat={lat} lng={lng} />}
+          <div className="flex justify-end mb-3">
+            <button type="button" disabled={weatherLoading} onClick={() => { setWeatherRefresh((value) => value + 1); setLiveTime(new Date()); }} className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 disabled:text-gray-400">
+              {weatherLoading ? "Refreshing weather…" : "Refresh weather ↻"}
+            </button>
+          </div>
+          {!customTime && currentWeather && <RightNowCard current={currentWeather} timeZone={timeZone} lat={lat} lng={lng} observation={observationForEvent(observations, liveTime, liveTime)} observationsLoading={observationsLoading} observationsUnavailable={observationsUnavailable} />}
+          <LiveSky lat={lat} lng={lng} />
           {days.map((day, i) => (
             <DayRow
               key={day.key}
@@ -1273,12 +1362,17 @@ export default function GoldenHourCalculator() {
               fogAssessments={fogAssessments}
               pointWeatherByEvent={pointWeatherByEvent}
               weatherLoading={weatherLoading}
-              referenceTime={referenceTime}
+              referenceTime={customTime ? referenceTime : liveTime}
               timeZone={timeZone}
               pinLat={lat}
               pinLng={lng}
               onPinMove={movePin}
               showDivider={i > 0}
+              observations={observations}
+              observationsLoading={observationsLoading}
+              observationsUnavailable={observationsUnavailable}
+              liveTime={liveTime}
+              predictionCalculatedAt={predictionCalculatedAt}
             />
           ))}
           {cometNote && (
@@ -1295,7 +1389,7 @@ export default function GoldenHourCalculator() {
               </a>
             </div>
           )}
-          <p className="text-[10px] text-gray-300 text-center pt-8">Weather source: Open-Meteo</p>
+          <p className="text-[10px] text-gray-500 text-center pt-8">Forecasts: Open-Meteo · Observations: NOAA Aviation Weather Center · Satellite: Windy</p>
         </div>
       )}
     </div>

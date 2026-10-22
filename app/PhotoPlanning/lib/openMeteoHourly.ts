@@ -63,7 +63,7 @@ export async function fetchHourlyAtPoints(
     `&start_date=${isoDate(new Date(minMs))}&end_date=${isoDate(new Date(maxMs))}` +
     "&timezone=GMT&timeformat=unixtime";
 
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     throw new Error(`Open-Meteo request failed (${res.status})`);
   }
@@ -86,7 +86,7 @@ export async function fetchHourlyAtPoints(
       }
     }
     if (bestIdx === -1 || bestDiff > MAX_GAP_MS) return null;
-    const row: HourlyRow = {};
+    const row: HourlyRow = { time: times[bestIdx] };
     for (const v of variables) row[v] = hourly[v]?.[bestIdx] ?? null;
     return row;
   });

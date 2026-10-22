@@ -8,6 +8,8 @@ import { fetchHourlyAtPoints, type HourlyQuery } from "./openMeteoHourly";
 const METERS_PER_MILE = 1609.34;
 
 export type PointReading = {
+  forecastAt: Date | null;
+  fetchedAt: Date | null;
   tempF: number | null;
   precipProbability: number | null;
   visibilityMiles: number | null;
@@ -23,10 +25,13 @@ export async function fetchPointWeatherBatch(queries: HourlyQuery[]): Promise<Po
     ["temperature_2m", "precipitation_probability", "visibility", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high"],
     "&temperature_unit=fahrenheit"
   );
+  const fetchedAt = new Date();
 
   return rows.map((row) => {
     const visibility = row?.visibility ?? null;
     return {
+      forecastAt: row?.time != null ? new Date(row.time) : null,
+      fetchedAt: row ? fetchedAt : null,
       tempF: row?.temperature_2m ?? null,
       precipProbability: row?.precipitation_probability ?? null,
       visibilityMiles: visibility != null ? visibility / METERS_PER_MILE : null,

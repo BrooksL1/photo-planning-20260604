@@ -5,6 +5,7 @@
 const METERS_PER_MILE = 1609.34;
 
 export type CurrentWeather = {
+  fetchedAt: Date;
   observedAt: Date;
   tempF: number | null;
   relativeHumidity: number | null;
@@ -43,13 +44,14 @@ export async function fetchCurrentWeather(lat: number, lng: number): Promise<Cur
     "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch" +
     "&timezone=GMT&timeformat=unixtime";
 
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     throw new Error(`Open-Meteo current request failed (${res.status})`);
   }
   const c = (await res.json()).current;
   const visibility: number | null = c.visibility ?? null;
   return {
+    fetchedAt: new Date(),
     observedAt: new Date(c.time * 1000),
     tempF: c.temperature_2m ?? null,
     relativeHumidity: c.relative_humidity_2m ?? null,
