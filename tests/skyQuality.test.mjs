@@ -91,3 +91,13 @@ test("explainSkyQuality calls the ideal case strong", () => {
   assert.match(e.summary, /strong color/);
   assert.ok(e.factors.every((f) => f.verdict === "good"));
 });
+
+test("skyRating maps 0-100 onto 1-10", () => {
+  const { skyRating } = load("../app/PhotoPlanning/lib/skyQuality.ts");
+  assert.equal(skyRating(0), 1);
+  assert.equal(skyRating(2), 1);
+  assert.equal(skyRating(36), 4);
+  assert.equal(skyRating(45), 5);
+  assert.equal(skyRating(99), 10);
+  assert.equal(skyRating(100), 10);
+});

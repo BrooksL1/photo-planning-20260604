@@ -221,3 +221,6 @@ export function explainSkyQuality(q: SkyQuality): SkyExplanation {
 
   return { summary, factors, notes: q.notes };
 }
+
+/** The 0-100 score as the 1-10 rating shown on tiles. */
+export const skyRating = (score: number): number => Math.min(10, Math.max(1, Math.round(score / 10)));

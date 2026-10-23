@@ -12,7 +12,7 @@ import { searchPlaces, type PlaceSuggestion } from "./lib/geocode";
 import { destinationPoint, toCompassBearing } from "./lib/geo";
 import { fetchPointWeatherBatch, type PointReading } from "./lib/pointWeather";
 import { fetchSkyQuality } from "./lib/skyInputs";
-import { explainSkyQuality, type SkyQuality } from "./lib/skyQuality";
+import { explainSkyQuality, skyRating, type SkyQuality } from "./lib/skyQuality";
 import { isWithinForecastRange, FORECAST_FUTURE_LIMIT_DAYS } from "./lib/openMeteoHourly";
 import SkyScene from "./SkyScene";
 import { skyNow } from "./lib/skyNow";
@@ -426,28 +426,29 @@ function SkyScoreBadge({ quality, loading, kind }: { quality: SkyQuality | null;
   if (!quality) {
     return (
       <span className="text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap bg-gray-50 text-gray-400">
-        {loading ? "Sky score…" : "Sky score · Not available"}
+        {loading ? "Sky…" : "Sky · n/a"}
       </span>
     );
   }
 
   const { summary, factors, notes } = explainSkyQuality(quality);
+  const rating = skyRating(quality.score);
   return (
     <ClickTip
       trigger={
         <>
-          Sky score <span className="font-bold">{quality.score}</span>
-          <span className="opacity-60">/100</span>
+          Sky <span className="font-bold">{rating}</span>
+          <span className="opacity-60">/10</span>
         </>
       }
       triggerClassName={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap cursor-pointer ${POTENTIAL_BADGE_COLORS[quality.label]}`}
       panelClassName="right-0 top-full mt-1.5 w-64 p-3"
     >
       <p className="font-semibold">
-        {quality.score}/100 · {quality.label}
+        Sky score {rating}/10 · {quality.label}
       </p>
       <p className="mt-1 text-gray-300">
-        How likely this {kind} is to light up with color, from 0 (flat or blocked) to 100 (best case). {summary}
+        How likely this {kind} is to light up with color, from 1 (flat or blocked) to 10 (best case). {summary}
       </p>
       <ul className="mt-2 space-y-1.5">
         {factors.map((f) => (
@@ -765,15 +766,10 @@ function EventTile({
             {event.moonIlluminationPercent}% illum.
           </span>
         )}
-      </div>
-
-      <div className="flex items-center justify-end h-7 mt-2">
         {isSun && (
-          <SkyScoreBadge
-            quality={skyQuality}
-            loading={skyQualityLoading}
-            kind={eventDirectionLabel(event.kind)}
-          />
+          <div className="ml-auto shrink-0">
+            <SkyScoreBadge quality={skyQuality} loading={skyQualityLoading} kind={eventDirectionLabel(event.kind)} />
+          </div>
         )}
       </div>
 
