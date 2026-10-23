@@ -11,6 +11,8 @@ import { fetchFogAssessments, type FogAssessment, type FogLikelihood } from "./l
 import { searchPlaces, type PlaceSuggestion } from "./lib/geocode";
 import { destinationPoint, toCompassBearing } from "./lib/geo";
 import { fetchPointWeatherBatch, type PointReading } from "./lib/pointWeather";
+import { fetchSkyQuality } from "./lib/skyInputs";
+import { explainSkyQuality, type SkyQuality } from "./lib/skyQuality";
 import { isWithinForecastRange, FORECAST_FUTURE_LIMIT_DAYS } from "./lib/openMeteoHourly";
 import SkyScene from "./SkyScene";
 import { skyNow } from "./lib/skyNow";
@@ -413,6 +415,64 @@ function ClickTip({
   );
 }
 
+const VERDICT_DOT: Record<"good" | "fair" | "poor", string> = {
+  good: "bg-emerald-400",
+  fair: "bg-amber-400",
+  poor: "bg-rose-400",
+};
+
+// 0-100 sunrise/sunset color score, with a plain-English tooltip.
+function SkyScoreBadge({ quality, loading, kind }: { quality: SkyQuality | null; loading: boolean; kind: string }) {
+  if (!quality) {
+    return (
+      <span className="text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap bg-gray-50 text-gray-400">
+        {loading ? "Sky score…" : "Sky score · Not available"}
+      </span>
+    );
+  }
+
+  const { summary, factors, notes } = explainSkyQuality(quality);
+  return (
+    <ClickTip
+      trigger={
+        <>
+          Sky score <span className="font-bold">{quality.score}</span>
+          <span className="opacity-60">/100</span>
+        </>
+      }
+      triggerClassName={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap cursor-pointer ${POTENTIAL_BADGE_COLORS[quality.label]}`}
+      panelClassName="left-0 top-full mt-1.5 w-64 p-3"
+    >
+      <p className="font-semibold">
+        {quality.score}/100 · {quality.label}
+      </p>
+      <p className="mt-1 text-gray-300">
+        How likely this {kind} is to light up with color, from 0 (flat or blocked) to 100 (best case). {summary}
+      </p>
+      <ul className="mt-2 space-y-1.5">
+        {factors.map((f) => (
+          <li key={f.name} className="flex gap-2">
+            <span aria-hidden className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${VERDICT_DOT[f.verdict]}`} />
+            <span>
+              <span className="font-semibold">{f.name}:</span> {f.text}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {notes.length > 0 && (
+        <ul className="mt-2 space-y-1 text-gray-300">
+          {notes.map((n) => (
+            <li key={n}>• {n}</li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-2 text-[10px] leading-snug text-gray-400">
+        Experimental: an estimate from forecast data, not yet checked against real sunsets.
+      </p>
+    </ClickTip>
+  );
+}
+
 function FogBadge({ fog }: { fog: FogAssessment | null }) {
   if (!fog) {
     return (
@@ -658,7 +718,8 @@ function EventTile({
   observationsLoading,
   observationsUnavailable,
   liveTime,
-  predictionCalculatedAt,
+  skyQuality,
+  skyQualityLoading,
 }: {
   event: UnifiedEvent;
   fog: FogAssessment | null;
@@ -673,7 +734,8 @@ function EventTile({
   observationsLoading: boolean;
   observationsUnavailable: boolean;
   liveTime: Date;
-  predictionCalculatedAt: Date | null;
+  skyQuality: SkyQuality | null;
+  skyQualityLoading: boolean;
 }) {
   const minutesAgo = Math.floor((referenceTime.getTime() - event.primaryTime.getTime()) / 60000);
   const justPassed = minutesAgo >= 0;
@@ -702,6 +764,16 @@ function EventTile({
           <span className="text-xs text-gray-400 font-medium whitespace-nowrap shrink-0">
             {event.moonIlluminationPercent}% illum.
           </span>
+        )}
+      </div>
+
+      <div className="flex items-center h-7 mt-2">
+        {isSun && (
+          <SkyScoreBadge
+            quality={skyQuality}
+            loading={skyQualityLoading}
+            kind={eventDirectionLabel(event.kind)}
+          />
         )}
       </div>
 
@@ -784,15 +856,6 @@ function EventTile({
       {isRecentEvent(event.primaryTime, liveTime) && <div className="mt-3">
         <MetarPanel observation={observationForEvent(observations, event.primaryTime, liveTime)} timeZone={timeZone} loading={observationsLoading} unavailable={observationsUnavailable} />
       </div>}
-      <div className="mt-auto pt-3 text-[10px] leading-relaxed text-gray-500 border-t border-black/5">
-        {potential && predictionCalculatedAt && <div title="Time this app calculated the potential using the retrieved forecast and fog data; not the weather model's issue time.">
-          Prediction calculated · {fmtDateTime(predictionCalculatedAt, timeZone)} {timeZoneAbbreviation(predictionCalculatedAt, timeZone)}
-        </div>}
-        <div>{pointWeather?.tip.fetchedAt
-          ? `Forecast checked · ${fmtDateTime(pointWeather.tip.fetchedAt, timeZone)} ${timeZoneAbbreviation(pointWeather.tip.fetchedAt, timeZone)}`
-          : weatherLoading ? "Checking forecast…" : "Forecast unavailable"}</div>
-        {pointWeather?.tip.forecastAt && <div>Cloud estimate for {fmt(pointWeather.tip.forecastAt, timeZone)} · {event.bearingDeg != null ? "20 mi toward event" : "at pin"}</div>}
-      </div>
     </div>
   );
 }
@@ -874,7 +937,8 @@ function DayRow({
   observationsLoading,
   observationsUnavailable,
   liveTime,
-  predictionCalculatedAt,
+  skyQualityByEvent,
+  skyQualityLoading,
 }: {
   label: string;
   relative: string;
@@ -892,7 +956,8 @@ function DayRow({
   observationsLoading: boolean;
   observationsUnavailable: boolean;
   liveTime: Date;
-  predictionCalculatedAt: Date | null;
+  skyQualityByEvent: (SkyQuality | null)[];
+  skyQualityLoading: boolean;
 }) {
   const useSlider = items.length > 3;
 
@@ -912,7 +977,8 @@ function DayRow({
       observationsLoading={observationsLoading}
       observationsUnavailable={observationsUnavailable}
       liveTime={liveTime}
-      predictionCalculatedAt={predictionCalculatedAt}
+      skyQuality={skyQualityByEvent[index] ?? null}
+      skyQualityLoading={skyQualityLoading}
     />
   );
 
@@ -978,7 +1044,8 @@ export default function GoldenHourCalculator() {
   const [observations, setObservations] = useState<MetarObservation[]>([]);
   const [observationsLoading, setObservationsLoading] = useState(false);
   const [observationsUnavailable, setObservationsUnavailable] = useState(false);
-  const [predictionCalculatedAt, setPredictionCalculatedAt] = useState<Date | null>(null);
+  const [skyQualityByEvent, setSkyQualityByEvent] = useState<(SkyQuality | null)[]>([]);
+  const [skyQualityLoading, setSkyQualityLoading] = useState(false);
   const [weatherRefresh, setWeatherRefresh] = useState(0);
   const [liveTime, setLiveTime] = useState<Date>(() => new Date());
   // The moment the current tiles were computed for ("just passed" is measured against it).
@@ -1181,7 +1248,8 @@ export default function GoldenHourCalculator() {
       setUnifiedEvents(combined);
       setFogAssessments(combined.map(() => null));
       setPointWeatherByEvent(combined.map(() => null));
-      setPredictionCalculatedAt(null);
+      setSkyQualityByEvent(combined.map(() => null));
+      setSkyQualityLoading(false);
 
       if (combined.length === 0) return;
       const targets = combined.map((e) => e.primaryTime);
@@ -1197,11 +1265,28 @@ export default function GoldenHourCalculator() {
         .then((readings) => combined.map((_, i) => ({ pin: readings[i], tip: readings[combined.length + i] })))
         .catch(() => combined.map(() => null));
       const fogPromise = fetchFogAssessments(lat, lng, targets).catch(() => targets.map(() => null));
+
+      // Sunrise/sunset color scores load on their own so they never hold up
+      // the rest of the tile.
+      const scoreable = combined.some((e) => (e.kind === "Sunrise" || e.kind === "Sunset") && e.bearingDeg != null);
+      if (scoreable) {
+        setSkyQualityLoading(true);
+        Promise.all(
+          combined.map((e) =>
+            (e.kind === "Sunrise" || e.kind === "Sunset") && e.bearingDeg != null
+              ? fetchSkyQuality(lat, lng, e.bearingDeg, e.primaryTime).catch(() => null)
+              : Promise.resolve(null)
+          )
+        ).then((scores) => {
+          if (cancelled) return;
+          setSkyQualityByEvent(scores);
+          setSkyQualityLoading(false);
+        });
+      }
       Promise.all([weatherPromise, fogPromise]).then(([pairs, fog]) => {
         if (cancelled) return;
         setPointWeatherByEvent(pairs);
         setFogAssessments(fog);
-        setPredictionCalculatedAt(new Date());
         setWeatherLoading(false);
       });
     }
@@ -1372,7 +1457,8 @@ export default function GoldenHourCalculator() {
               observationsLoading={observationsLoading}
               observationsUnavailable={observationsUnavailable}
               liveTime={liveTime}
-              predictionCalculatedAt={predictionCalculatedAt}
+              skyQualityByEvent={skyQualityByEvent}
+              skyQualityLoading={skyQualityLoading}
             />
           ))}
           {cometNote && (

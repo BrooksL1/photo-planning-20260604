@@ -74,3 +74,20 @@ test("score always stays within 0-100", () => {
   const best = sky(ideal, { precip24hMm: 4, pressureTrend3h: 3, rh300: 80 });
   assert.ok(best.score <= 100 && best.score >= 0);
 });
+
+test("explainSkyQuality describes a blocked sky in plain words", () => {
+  const { explainSkyQuality } = load("../app/PhotoPlanning/lib/skyQuality.ts");
+  const blocked = sky([pt(20, 90, 40, 45), pt(60, 90, 40, 45), pt(120, 90, 40, 45), pt(200, 90, 40, 45)]);
+  const e = explainSkyQuality(blocked);
+  assert.equal(e.factors[0].verdict, "poor");
+  assert.match(e.factors[0].text, /block/i);
+  assert.equal(e.summary, "Color is unlikely.");
+  assert.equal(e.factors.length, 4);
+});
+
+test("explainSkyQuality calls the ideal case strong", () => {
+  const { explainSkyQuality } = load("../app/PhotoPlanning/lib/skyQuality.ts");
+  const e = explainSkyQuality(sky(ideal));
+  assert.match(e.summary, /strong color/);
+  assert.ok(e.factors.every((f) => f.verdict === "good"));
+});
