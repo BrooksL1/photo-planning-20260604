@@ -26,7 +26,7 @@ import {
   timeZoneAbbreviation,
 } from "./lib/timeZone";
 
-// Leaflet touches `window` at import time -- must load client-only.
+// The map is browser-only (Google Maps JS API) -- must load client-only.
 const EventMap = dynamic(() => import("./EventMap"), {
   ssr: false,
   loading: () => <div className="h-[150px] bg-gray-100 rounded-lg animate-pulse" />,

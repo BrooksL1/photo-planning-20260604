@@ -1,34 +1,57 @@
 "use client";
 
 import { useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
-import L from "leaflet";
+import { APIProvider, AdvancedMarker, Map, useMap } from "@vis.gl/react-google-maps";
 import { destinationPoint } from "./lib/geo";
 
-// Leaflet's default marker icon paths break under bundlers unless pointed at
-// hosted assets explicitly.
-const pinIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
+const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+// AdvancedMarker requires a map ID. DEMO_MAP_ID works without cloud styling;
+// set NEXT_PUBLIC_GOOGLE_MAP_ID to use a styled map from Google Cloud.
+const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAP_ID ?? "DEMO_MAP_ID";
 
-function arrowheadIcon(bearingDeg: number) {
-  return L.divIcon({
-    className: "",
-    html: `<div style="transform: rotate(${bearingDeg}deg); width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 16px solid #6366f1;"></div>`,
-    iconSize: [14, 16],
-    iconAnchor: [7, 8],
-  });
+const LINE_COLOR = "#6366f1";
+
+function Arrowhead({ bearingDeg }: { bearingDeg: number }) {
+  return (
+    <div
+      style={{
+        transform: `rotate(${bearingDeg}deg)`,
+        width: 0,
+        height: 0,
+        borderLeft: "7px solid transparent",
+        borderRight: "7px solid transparent",
+        borderBottom: `16px solid ${LINE_COLOR}`,
+      }}
+    />
+  );
 }
 
-function FitToBounds({ bounds }: { bounds: [[number, number], [number, number]] }) {
+// The Maps JS API has no declarative polyline; draw it on the map instance.
+function DirectionLine({ fromLat, fromLng, toLat, toLng }: { fromLat: number; fromLng: number; toLat: number; toLng: number }) {
   const map = useMap();
   useEffect(() => {
-    map.fitBounds(bounds, { padding: [24, 24] });
-  }, [map, bounds]);
+    if (!map) return;
+    const line = new google.maps.Polyline({
+      map,
+      path: [
+        { lat: fromLat, lng: fromLng },
+        { lat: toLat, lng: toLng },
+      ],
+      strokeColor: LINE_COLOR,
+      strokeWeight: 3,
+      clickable: false,
+    });
+    return () => line.setMap(null);
+  }, [map, fromLat, fromLng, toLat, toLng]);
+  return null;
+}
+
+function FitToBounds({ bounds }: { bounds: google.maps.LatLngBoundsLiteral }) {
+  const map = useMap();
+  const { south, west, north, east } = bounds;
+  useEffect(() => {
+    map?.fitBounds({ south, west, north, east }, 24);
+  }, [map, south, west, north, east]);
   return null;
 }
 
@@ -45,52 +68,58 @@ export default function EventMap({
   bearingDeg?: number;
   onPinMove: (lat: number, lng: number) => void;
 }) {
+  const pin = { lat: pinLat, lng: pinLng };
   const tip = bearingDeg != null ? destinationPoint(pinLat, pinLng, bearingDeg, 20) : null;
   const corners =
     bearingDeg != null
       ? [destinationPoint(pinLat, pinLng, bearingDeg + 180, 10), destinationPoint(pinLat, pinLng, bearingDeg, 30)]
       : [destinationPoint(pinLat, pinLng, 225, 14), destinationPoint(pinLat, pinLng, 45, 14)];
 
-  const bounds: [[number, number], [number, number]] = [
-    [Math.min(corners[0].lat, corners[1].lat), Math.min(corners[0].lng, corners[1].lng)],
-    [Math.max(corners[0].lat, corners[1].lat), Math.max(corners[0].lng, corners[1].lng)],
-  ];
+  const bounds: google.maps.LatLngBoundsLiteral = {
+    south: Math.min(corners[0].lat, corners[1].lat),
+    west: Math.min(corners[0].lng, corners[1].lng),
+    north: Math.max(corners[0].lat, corners[1].lat),
+    east: Math.max(corners[0].lng, corners[1].lng),
+  };
+
+  if (!API_KEY) {
+    return (
+      <div style={{ height: 150, width: "100%" }} className="flex items-center justify-center text-xs text-zinc-500">
+        Map unavailable: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not set.
+      </div>
+    );
+  }
 
   return (
-    <MapContainer
-      center={[pinLat, pinLng]}
-      zoom={11}
-      scrollWheelZoom={false}
-      style={{ height: 150, width: "100%" }}
-    >
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      />
-      <FitToBounds bounds={bounds} />
-      <Marker
-        position={[pinLat, pinLng]}
-        icon={pinIcon}
-        draggable
-        eventHandlers={{
-          dragend: (e) => {
-            const pos = (e.target as L.Marker).getLatLng();
-            onPinMove(pos.lat, pos.lng);
-          },
-        }}
-      />
-      {tip && bearingDeg != null && (
-        <>
-          <Polyline
-            positions={[
-              [pinLat, pinLng],
-              [tip.lat, tip.lng],
-            ]}
-            pathOptions={{ color: "#6366f1", weight: 3 }}
-          />
-          <Marker position={[tip.lat, tip.lng]} icon={arrowheadIcon(bearingDeg)} />
-        </>
-      )}
-    </MapContainer>
+    <APIProvider apiKey={API_KEY}>
+      <Map
+        mapId={MAP_ID}
+        defaultCenter={pin}
+        defaultZoom={11}
+        // "cooperative" needs Ctrl/Cmd + scroll to zoom, so the page can still
+        // scroll past the map (matches the old scrollWheelZoom={false}).
+        gestureHandling="cooperative"
+        disableDefaultUI
+        zoomControl
+        style={{ height: 150, width: "100%" }}
+      >
+        <FitToBounds bounds={bounds} />
+        <AdvancedMarker
+          position={pin}
+          draggable
+          onDragEnd={(e) => {
+            if (e.latLng) onPinMove(e.latLng.lat(), e.latLng.lng());
+          }}
+        />
+        {tip && bearingDeg != null && (
+          <>
+            <DirectionLine fromLat={pinLat} fromLng={pinLng} toLat={tip.lat} toLng={tip.lng} />
+            <AdvancedMarker position={tip}>
+              <Arrowhead bearingDeg={bearingDeg} />
+            </AdvancedMarker>
+          </>
+        )}
+      </Map>
+    </APIProvider>
   );
 }
