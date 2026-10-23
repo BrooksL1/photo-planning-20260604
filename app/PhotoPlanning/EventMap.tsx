@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { Component, useEffect, useState, type ReactNode } from "react";
 import { APIProvider, AdvancedMarker, Map, useMap } from "@vis.gl/react-google-maps";
 import { destinationPoint } from "./lib/geo";
 
@@ -10,6 +10,26 @@ const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAP_ID ?? "DEMO_MAP_ID";
 
 const LINE_COLOR = "#6366f1";
+
+function MapUnavailable({ reason }: { reason: string }) {
+  return (
+    <div style={{ height: 150, width: "100%" }} className="flex items-center justify-center px-3 text-center text-xs text-zinc-500">
+      Map unavailable: {reason}
+    </div>
+  );
+}
+
+// A map failure (bad key, blocked domain, script error) must never take down
+// the whole page, so contain it here.
+class MapErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
+  state = { error: null as string | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error: error.message || "unexpected error" };
+  }
+  render() {
+    return this.state.error ? <MapUnavailable reason={this.state.error} /> : this.props.children;
+  }
+}
 
 function Arrowhead({ bearingDeg }: { bearingDeg: number }) {
   return (
@@ -55,19 +75,44 @@ function FitToBounds({ bounds }: { bounds: google.maps.LatLngBoundsLiteral }) {
   return null;
 }
 
-export default function EventMap({
-  pinLat,
-  pinLng,
-  bearingDeg,
-  onPinMove,
-}: {
+export default function EventMap(props: EventMapProps) {
+  const [authFailed, setAuthFailed] = useState(false);
+
+  // Google calls this global when it rejects the key (wrong referrer, API not
+  // enabled, billing off, ...).
+  useEffect(() => {
+    const w = window as unknown as { gm_authFailure?: () => void };
+    w.gm_authFailure = () => setAuthFailed(true);
+    return () => {
+      delete w.gm_authFailure;
+    };
+  }, []);
+
+  if (!API_KEY) return <MapUnavailable reason="NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not set." />;
+  return (
+    <div style={{ position: "relative" }}>
+      <MapErrorBoundary>
+        <EventMapInner {...props} />
+      </MapErrorBoundary>
+      {authFailed && (
+        <div style={{ position: "absolute", inset: 0, background: "#fff" }}>
+          <MapUnavailable reason="Google rejected the API key for this site (check its allowed referrers)." />
+        </div>
+      )}
+    </div>
+  );
+}
+
+type EventMapProps = {
   pinLat: number;
   pinLng: number;
   // Omitted for events with no direction (meteor showers, eclipses): the
   // map then just frames the pin, with no arrow.
   bearingDeg?: number;
   onPinMove: (lat: number, lng: number) => void;
-}) {
+};
+
+function EventMapInner({ pinLat, pinLng, bearingDeg, onPinMove }: EventMapProps) {
   const pin = { lat: pinLat, lng: pinLng };
   const tip = bearingDeg != null ? destinationPoint(pinLat, pinLng, bearingDeg, 20) : null;
   const corners =
@@ -81,14 +126,6 @@ export default function EventMap({
     north: Math.max(corners[0].lat, corners[1].lat),
     east: Math.max(corners[0].lng, corners[1].lng),
   };
-
-  if (!API_KEY) {
-    return (
-      <div style={{ height: 150, width: "100%" }} className="flex items-center justify-center text-xs text-zinc-500">
-        Map unavailable: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not set.
-      </div>
-    );
-  }
 
   return (
     <APIProvider apiKey={API_KEY}>
