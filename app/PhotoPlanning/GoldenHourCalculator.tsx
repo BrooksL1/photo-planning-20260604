@@ -441,7 +441,7 @@ function SkyScoreBadge({ quality, loading, kind }: { quality: SkyQuality | null;
         </>
       }
       triggerClassName={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap cursor-pointer ${POTENTIAL_BADGE_COLORS[quality.label]}`}
-      panelClassName="left-0 top-full mt-1.5 w-64 p-3"
+      panelClassName="right-0 top-full mt-1.5 w-64 p-3"
     >
       <p className="font-semibold">
         {quality.score}/100 · {quality.label}
@@ -767,7 +767,7 @@ function EventTile({
         )}
       </div>
 
-      <div className="flex items-center h-7 mt-2">
+      <div className="flex items-center justify-end h-7 mt-2">
         {isSun && (
           <SkyScoreBadge
             quality={skyQuality}
