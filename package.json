@@ -2,7 +2,7 @@
   "name": "brooksl-tools",
   "private": true,
   "workspaces": [
-    "photo planning",
+    "photo-planning",
     "training plan"
   ],
   "scripts": {
