@@ -1366,3 +1366,18 @@
 
 .calendarPast { background: #e3e5e4; border-color: #c4cac7; }
 .calendarPast:hover { background: #d7dcda; border-color: #8b9790; }
+
+.weekMileage { display: flex; flex-direction: column; gap: 8px; }
+.weekMileage > strong { font-size: 17px; }
+.weekMileage > span:first-child { font-size: 9px; letter-spacing: .6px; }
+.weekWeight { display: flex; flex-direction: column; gap: 5px; border-top: 1px solid #ccd3c7; padding-top: 8px; margin-top: 3px; font-size: 10px; }
+.weekWeight strong { white-space: nowrap; }
+.weekWeight small { font-size: 9px; }
+@media (max-width: 900px) {
+  .weekTotals { flex-direction: column; align-items: stretch; }
+  .weekMileage { flex-direction: row; align-items: center; justify-content: flex-end; gap: 5px; }
+  .weekMileage > span:first-child { margin-right: auto; font-size: 8px; letter-spacing: 0; }
+  .weekMileage > strong { font-size: 10px; }
+  .weekWeight { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 5px 10px; padding-top: 5px; }
+  .weekWeight small { flex-basis: 100%; text-align: right; }
+}

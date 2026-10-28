@@ -13,7 +13,7 @@ export function sameOrigin(request: Request) {
   return origin === new URL(request.url).origin;
 }
 export async function readPrivate(path: string) {
-  const result=await get(path,{access:"private",useCache:false});
+  const result=await get(path,{access:"private",useCache:false,headers:{"Accept-Encoding":"identity"}});
   if(!result) return {value:null,etag:null};
   if(!result.stream) throw new Error("Missing blob content");
   return {value:await new Response(result.stream).json(),etag:result.blob.etag};

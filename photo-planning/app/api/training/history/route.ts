@@ -8,6 +8,6 @@ export async function GET() {
     const logs=mergeGarmin(journal.value?.logs??[],garmin.value?.activities??[],[],DEFAULT_SETTINGS).map((l:Workout)=>({
       id:l.id,date:l.date,title:l.title,kind:l.kind,status:l.status,minutes:l.minutes,miles:l.miles,pullups:l.pullups,pushups:l.pushups,squats:l.squats,vest:l.vest,strictMax:l.strictMax,weight:0,rpe:l.rpe,scaled:l.scaled,partition:l.partition,avgHr:l.avgHr,maxHr:l.maxHr,runMinutes:l.runMinutes,strengthMinutes:l.strengthMinutes,updatedAt:l.updatedAt,notes:"",garminIds:l.garminIds,garmin:l.garmin,
     }));
-    return Response.json({logs,syncedAt:garmin.value?.syncedAt??null},{headers:{"Cache-Control":"no-store"}});
+    return Response.json({logs,weights:garmin.value?.weights??[],weightSyncedAt:garmin.value?.weightSyncedAt??null,syncedAt:garmin.value?.syncedAt??null},{headers:{"Cache-Control":"no-store"}});
   } catch {return Response.json({error:"Workout history is temporarily unavailable."},{status:503,headers:{"Cache-Control":"no-store"}});}
 }

@@ -3,6 +3,7 @@
 const fs=require('node:fs');
 require('../photo-planning/tests/tsLoader.cjs');
 const {validActivities}=require('../training plan/src/garmin.ts');
+const {normalizeWeights,validWeights,mergeWeights}=require('../training plan/src/weight.ts');
 async function main() {
  const [inputFile,envFile]=process.argv.slice(2);
  if(!inputFile || !envFile) throw new Error('Usage: node scripts/import-garmin.cjs PRIVATE_INPUT_JSON PRIVATE_ENV_FILE');
@@ -10,6 +11,8 @@ async function main() {
  const {get,put}=await import('@vercel/blob');
  const input=JSON.parse(fs.readFileSync(inputFile,'utf8'));
  if(!Array.isArray(input.activities)) throw new Error('Expected activities array');
+ const weightInput=input.bodyMeasurements===undefined?[]:normalizeWeights(input.bodyMeasurements);
+ if(!validWeights(weightInput))throw new Error('Invalid weight data');
  const now=new Date().toISOString();
  const incoming=input.activities.filter(a=>!a.is_parent).map(a=>{
    const d=a.details??{}, f=d.fit_metrics?.session??{};
@@ -19,11 +22,13 @@ async function main() {
    return {id:String(a.activity_id),date,startTime:start,type:a.activity_type??d.activity_type??'OTHER',name:(a.activity_name??d.activity_name??'Garmin activity').slice(0,200),minutes:(a.duration_s??d.duration_s??f.total_timer_time??0)/60,miles:(a.distance_km??d.distance_km??(f.total_distance??0)/1000)/1.609344,device:a.device??d.data_source??'Garmin',...(hr!==undefined?{avgHr:hr}:{}),...(max!==undefined?{maxHr:max}:{}),...(d.fit_metrics?.subjective?.rpe!==undefined?{rpe:d.fit_metrics.subjective.rpe}:{}),importedAt:now};
  });
  if(!validActivities(incoming)) throw new Error('Invalid Garmin data; existing imports were not changed');
- const old=await get('training/garmin.json',{access:'private',useCache:false});
+ const old=await get('training/garmin.json',{access:'private',useCache:false,headers:{'Accept-Encoding':'identity'}});
  const previous=old?.stream?await new Response(old.stream).json():{activities:[]};
  if(!validActivities(previous.activities))throw new Error('Existing import needs review');
+ if(!validWeights(previous.weights??[]))throw new Error('Existing weights need review');
+ const weights=mergeWeights(previous.weights??[],weightInput);
  const activities=[...new Map([...previous.activities,...incoming].map(a=>[a.id,a])).values()];
- await put('training/garmin.json',JSON.stringify({version:1,syncedAt:now,activities}),{access:'private',contentType:'application/json',addRandomSuffix:false,allowOverwrite:!!old,...(old?{ifMatch:old.blob.etag}:{}),cacheControlMaxAge:60});
- console.log(JSON.stringify({imported:incoming.length,total:activities.length,syncedAt:now}));
+ await put('training/garmin.json',JSON.stringify({version:1,syncedAt:now,activities,weights,weightSyncedAt:input.bodyMeasurements===undefined?previous.weightSyncedAt??null:now}),{access:'private',contentType:'application/json',addRandomSuffix:false,allowOverwrite:!!old,...(old?{ifMatch:old.blob.etag}:{}),cacheControlMaxAge:60});
+ console.log(JSON.stringify({imported:incoming.length,total:activities.length,weightsImported:weightInput.length,weightsTotal:weights.length,syncedAt:now}));
 }
 main().catch(e=>{console.error(e.message);process.exitCode=1;});

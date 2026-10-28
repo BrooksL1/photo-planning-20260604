@@ -244,3 +244,24 @@ test("morning forecasts select upcoming workout mornings in the location timezon
   const absent=nextMorningForecasts(forecast,"10:00",new Date("2026-10-28T17:00:00Z"));
   assert.equal(absent[0].tempF,null);
 });
+
+const {weeklyWeight,normalizeWeights,mergeWeights}=load("../../training plan/src/weight.ts");
+test("weight targets start at 196 on October 31 and drop one pound per Sunday–Saturday week",()=>{
+  assert.equal(weeklyWeight("2026-10-24",[]).target,null);
+  assert.equal(weeklyWeight("2026-10-31",[]).target,196);
+  assert.equal(weeklyWeight("2026-11-01",[]).target,195);
+  assert.equal(weeklyWeight("2026-11-14",[]).target,194);
+  assert.equal(weeklyWeight("2026-10-28",[]).average,null);
+});
+test("Garmin weight import converts kg, deduplicates corrections and averages only the week's measurements",()=>{
+  const raw={date:"2026-10-28",measurement_time_utc:"2026-10-28T04:00:00Z",weight_kg:89.07};
+  const normalized=normalizeWeights([raw]);
+  assert.ok(Math.abs(normalized[0].pounds-196.3657)<.001);
+  const corrected=mergeWeights(normalized,normalizeWeights([{...raw,weight_kg:90}]));
+  assert.equal(corrected.length,1);
+  const entries=mergeWeights(corrected,normalizeWeights([{...raw,date:"2026-10-30",measurement_time_utc:"2026-10-30T04:00:00Z",weight_kg:88},{...raw,date:"2026-10-24",measurement_time_utc:"2026-10-24T04:00:00Z",weight_kg:100}]));
+  const week=weeklyWeight("2026-10-28",entries);
+  assert.equal(week.count,2);
+  assert.ok(Math.abs(week.average-89/0.45359237)<.00001);
+  assert.throws(()=>normalizeWeights([{...raw,weight_kg:-1}]));
+});

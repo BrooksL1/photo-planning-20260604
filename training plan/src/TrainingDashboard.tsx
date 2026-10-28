@@ -31,6 +31,7 @@ import {
 } from "./plan";
 import styles from "./training.module.css";
 import { sunday, weeklyMiles } from "./calendar";
+import { weeklyWeight, validWeights, type WeightMeasurement } from "./weight";
 import { useMorningWeather } from "./useMorningWeather";
 import { mergeGarmin, validActivities } from "./garmin";
 
@@ -120,6 +121,7 @@ export default function TrainingDashboard() {
   const [data, setData] = useState<Data>(emptyData);
   const [ready, setReady] = useState(false);
   const [cloud, setCloud] = useState(false);
+  const [weights, setWeights] = useState<WeightMeasurement[]>([]);
   const [syncMessage, setSyncMessage] = useState("Public workout history. Open your personal editing link to publish logs and corrections.");
   const [syncBusy, setSyncBusy] = useState(false);
   const dataRef = useRef(data);
@@ -194,7 +196,8 @@ export default function TrainingDashboard() {
         const r=await fetch("/api/training/history",{cache:"no-store"});
         if(!r.ok) throw new Error("Public history is temporarily unavailable. Local entries are kept.");
         const history=await r.json();
-        if(!validateLogs(history.logs)) throw new Error("Public history could not be read.");
+        if(!validateLogs(history.logs) || !validWeights(history.weights??[])) throw new Error("Public history could not be read.");
+        setWeights(history.weights??[]);
         const local=dataRef.current;
         const logs=[...new Map([...history.logs,...local.logs].map((l:Workout)=>[l.id,l])).values()];
         const next={...local,logs};dataRef.current=next;setData(next);
@@ -204,7 +207,8 @@ export default function TrainingDashboard() {
       if(!journal.ok || !garmin.ok) throw new Error("Private imports are temporarily unavailable. Your local journal is unchanged.");
       const remote=await journal.json(), imported=await garmin.json();
       if(remote.value && !isData(remote.value)) throw new Error("The private journal needs review. Local entries were kept.");
-      if(!validActivities(imported.activities)) throw new Error("Garmin import data could not be read.");
+      if(!validActivities(imported.activities) || !validWeights(imported.weights??[])) throw new Error("Garmin import data could not be read.");
+      setWeights(imported.weights??[]);
       const local=dataRef.current;
       const merged = new Map<string,Workout>();
       for(const l of [...local.logs,...(remote.value?.logs??[])]) {
@@ -535,6 +539,7 @@ export default function TrainingDashboard() {
                   </div>
                   {calendarWeeks.map(week => {
                     const totals = weeklyMiles(week,data.logs);
+                    const weight = weeklyWeight(week[0].date,weights);
                     return <Fragment key={week[0].date}>
                       {week.map((s,index) => {
                         const logs=data.logs.filter(l=>l.date===s.date);
@@ -556,7 +561,12 @@ export default function TrainingDashboard() {
                         </button>;
                       })}
                       <div className={styles.weekTotals} aria-label={`Week of ${week[0].date}: ${totals.planned.toFixed(1)} miles planned, ${totals.logged.toFixed(1)} miles logged`}>
-                        <span>WEEK TOTAL</span><strong>{totals.planned.toFixed(1)} mi</strong><span>planned</span><strong>{totals.logged.toFixed(1)} mi</strong><span>logged</span>
+                        <div className={styles.weekMileage}><span>WEEK TOTAL</span><strong>{totals.planned.toFixed(1)} mi</strong><span>planned</span><strong>{totals.logged.toFixed(1)} mi</strong><span>logged</span></div>
+                        <div className={styles.weekWeight} aria-label={`Weight for week ending ${weight.end}`}>
+                          {weight.target!==null && <span>Target <strong>{weight.target} lb</strong></span>}
+                          <span title={`Garmin · arithmetic average of ${weight.count} measurements this Sunday–Saturday week; missing days are excluded.`}>Avg <strong>{weight.average===null?"—":`${weight.average.toFixed(1)} lb`}</strong></span>
+                          <small>{weight.count ? `Garmin · ${weight.count} weigh-in${weight.count===1?"":"s"}` : "No Garmin weigh-ins"}</small>
+                        </div>
                       </div>
                     </Fragment>;
                   })}
@@ -1098,7 +1108,7 @@ export default function TrainingDashboard() {
         </details>
         <footer className={styles.footer}>
           <a href="/">← All brooksL tools</a>
-          {data.logs.some(l=>l.garmin?.length) && <small>Insights derived in part from Garmin device-sourced data.</small>}
+          {(weights.length>0 || data.logs.some(l=>l.garmin?.length)) && <small>Insights derived in part from Garmin device-sourced data.</small>}
         </footer>
       </main>
       <dialog
