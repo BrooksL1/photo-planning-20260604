@@ -9,6 +9,9 @@ export const LOCATION_EVENT = "brooksl:location";
 const KEY = "brooksl.location.v1";
 const COOKIE = "brooksl_location";
 let pending: Promise<SavedLocation> | null = null;
+let arrival: Promise<SavedLocation | undefined> | null = null;
+let revision = 0;
+let memory: SavedLocation | null = null;
 
 export function locationPreference(): "device" | "saved" | "off" | null {
   const value = document.cookie
@@ -30,7 +33,7 @@ function setPreference(value: "device" | "saved" | "off") {
 export function savedLocation(): SavedLocation | null {
   if (locationPreference() === "off") return null;
   try {
-    const value = JSON.parse(localStorage.getItem(KEY) ?? "null");
+    const value = JSON.parse(localStorage.getItem(KEY) ?? JSON.stringify(memory));
     return value &&
       Number.isFinite(value.lat) &&
       Math.abs(value.lat) <= 90 &&
@@ -41,10 +44,12 @@ export function savedLocation(): SavedLocation | null {
       ? value
       : null;
   } catch {
-    return null;
+    return memory;
   }
 }
 export function saveLocation(value: SavedLocation) {
+  revision++;
+  memory = value;
   setPreference(value.source);
   try {
     localStorage.setItem(KEY, JSON.stringify(value));
@@ -54,6 +59,8 @@ export function saveLocation(value: SavedLocation) {
   window.dispatchEvent(new CustomEvent(LOCATION_EVENT, { detail: value }));
 }
 export function forgetLocation() {
+  revision++;
+  memory = null;
   setPreference("off");
   try {
     localStorage.removeItem(KEY);
@@ -64,6 +71,7 @@ export function forgetLocation() {
 }
 export function requestDeviceLocation(): Promise<SavedLocation> {
   if (pending) return pending;
+  const startedAtRevision = revision;
   pending = new Promise<SavedLocation>((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(
@@ -81,7 +89,8 @@ export function requestDeviceLocation(): Promise<SavedLocation> {
           source: "device",
           updatedAt: Date.now(),
         };
-        saveLocation(value);
+        // Do not undo a manual place choice or opt-out while locating.
+        if (revision === startedAtRevision) saveLocation(value);
         resolve(value);
       },
       (error) =>
@@ -99,16 +108,22 @@ export function requestDeviceLocation(): Promise<SavedLocation> {
   });
   return pending;
 }
-// Never trigger a permission prompt automatically. Reuse the saved place and
-// refresh device coordinates only when the browser already grants access.
-export async function refreshGrantedLocation() {
-  if (locationPreference() !== "device" || !navigator.permissions) return;
-  try {
-    const permission = await navigator.permissions.query({
-      name: "geolocation",
-    });
-    if (permission.state === "granted") await requestDeviceLocation();
-  } catch {
-    /* Keep the last saved location; browsers may not support querying. */
-  }
+// Run once per document, shared by all routes and React effect remounts.
+// A later visit can ask again if the browser granted only temporary permission.
+export function initializeLocation(): Promise<SavedLocation | undefined> {
+  const preference = locationPreference();
+  if (preference === "off" || preference === "saved") return Promise.resolve(undefined);
+  if (arrival) return arrival;
+  arrival = (async () => {
+    let denied = false;
+    try {
+      denied = (await navigator.permissions?.query({ name: "geolocation" }))?.state === "denied";
+    } catch {
+      // Safari and other browsers may not support the Permissions query.
+    }
+    if (denied) throw new Error("Location is blocked. Allow location for this site in your browser settings, or choose a saved place.");
+    if (locationPreference() === "off" || locationPreference() === "saved") return;
+    return requestDeviceLocation();
+  })();
+  return arrival;
 }

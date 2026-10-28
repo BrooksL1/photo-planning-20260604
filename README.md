@@ -16,7 +16,7 @@ Next.js guidance is installed in `photo-planning/node_modules/next/dist/docs/`. 
 
 ## Location
 
-A one-year preference cookie uses `Path=/`, `SameSite=Lax`, and `Secure` on HTTPS, with `Domain=brooksl.com` on that domain and its subdomains. Coordinates are stored in browser local storage, never in the cookie. A manually chosen place works without device permission. Device coordinates refresh automatically only while browser permission is already granted; a prompt is requested only after a user clicks a location button. Browser permissions are origin-specific and cannot be granted or made permanent by a cookie.
+A one-year preference cookie uses `Path=/`, `SameSite=Lax`, and `Secure` on HTTPS, with `Domain=brooksl.com` on that domain and its subdomains. Coordinates are stored in browser local storage, never in the cookie. A manually chosen place works without device permission. The shared root layout requests device location once on arrival, including a browser prompt when needed, and reuses browser permission when available. Explicit off and manually saved place preferences are respected. All tools on www.brooksl.com share the coordinate cache and location update event; the apex redirects to that hostname. Browser permissions are origin-specific and cannot be granted or made permanent by a cookie.
 
 ## Training data
 

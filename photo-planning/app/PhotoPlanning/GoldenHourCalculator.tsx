@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import SunCalc from "suncalc";
-import { LOCATION_EVENT, refreshGrantedLocation, requestDeviceLocation, savedLocation, saveLocation, type SavedLocation } from "../lib/location";
+import { LOCATION_EVENT, requestDeviceLocation, savedLocation, saveLocation, type SavedLocation } from "../lib/location";
 import type { SolarEvent, MoonEvent, CelestialEvent } from "./lib/types";
 import { getUpcomingSolarEvents } from "./lib/solarEvents";
 import { getUpcomingMoonEvents, horizonCrossing } from "./lib/moonEvents";
@@ -1092,7 +1092,7 @@ export default function GoldenHourCalculator() {
     setTimeOpen(false);
   }
 
-  // Restore a place without asking for browser permission on every visit.
+  // Consume the shared site location; the root layout handles device access.
   useEffect(() => {
     function restore() {
       const value: SavedLocation | null = savedLocation();
@@ -1101,7 +1101,6 @@ export default function GoldenHourCalculator() {
     }
     restore();
     window.addEventListener(LOCATION_EVENT, restore);
-    void refreshGrantedLocation();
     return () => window.removeEventListener(LOCATION_EVENT, restore);
   }, []);
 

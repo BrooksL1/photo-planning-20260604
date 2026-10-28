@@ -5,7 +5,7 @@ import {
   forgetLocation,
   LOCATION_EVENT,
   locationPreference,
-  refreshGrantedLocation,
+  initializeLocation,
   requestDeviceLocation,
   savedLocation,
   type SavedLocation,
@@ -23,8 +23,12 @@ export default function LocationPreference() {
     }
     sync();
     window.addEventListener(LOCATION_EVENT, sync);
-    void refreshGrantedLocation();
-    return () => window.removeEventListener(LOCATION_EVENT, sync);
+    let active = true;
+    setBusy(true);
+    void initializeLocation().catch((error: unknown) => {
+      if (active) setMessage(error instanceof Error ? error.message : "Location unavailable.");
+    }).finally(() => { if (active) setBusy(false); });
+    return () => { active = false; window.removeEventListener(LOCATION_EVENT, sync); };
   }, []);
   async function enable() {
     setBusy(true);
@@ -59,8 +63,8 @@ export default function LocationPreference() {
         </strong>
         <p>
           {saved
-            ? `Last saved ${new Date(saved.updatedAt).toLocaleDateString()}. We reuse this place when browser permission expires. Update it when you travel.`
-            : "Remember a place across visits, or enable device location to keep Photo Planning close to home."}
+            ? `Last saved ${new Date(saved.updatedAt).toLocaleDateString()}. Shared with Photo Planning and other location-aware tools. Device location refreshes when you visit; this saved place is the fallback.`
+            : "We request device location when you arrive and share it across your tools. You can also choose a place manually."}
         </p>
         <details>
           <summary>How remembering works</summary>
