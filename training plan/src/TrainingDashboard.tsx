@@ -35,6 +35,17 @@ import { sunday, weeklyMiles } from "./calendar";
 import { useMorningWeather } from "./useMorningWeather";
 import { mergeGarmin, validActivities } from "./garmin";
 
+function compactTitle(s: Session) {
+  if (s.attempt) return s.attempt;
+  if (s.trip) return "Away";
+  if (/tempo/i.test(s.title)) return "Tempo";
+  if (/interval/i.test(s.title)) return "Ints";
+  if (s.kind === "strength" || s.kind === "murph") return "Murph";
+  if (s.kind === "rest") return "Rest";
+  if (s.kind === "recovery") return "Recov";
+  if (/long/i.test(s.title)) return "Long";
+  return s.title.includes("strength") ? "Easy+" : "Easy";
+}
 function sMiles(s: Session) { return s.miles ? ` · ${s.miles} planned miles` : ""; }
 
 const STORAGE_KEY = "brooksl.training.v1";
@@ -630,16 +641,16 @@ export default function TrainingDashboard() {
                         return <button key={s.date} type="button" data-week={index===0?s.date:undefined} onClick={()=>openDetails(s)}
                           className={`${styles.calendarCell} ${s.date===today?styles.calendarToday:""}`}
                           aria-label={`${displayDate(s.date,{weekday:"long",month:"long",day:"numeric"})}: ${s.title}${matched?", Garmin workout matched":""}`}>
-                          <span className={styles.cellDate}>{displayDate(s.date,{month:"short",day:"numeric"})}{s.date===today && <small>Today</small>}</span>
+                          <span className={styles.cellDate}><span className={styles.desktopOnly}>{displayDate(s.date,{month:"short",day:"numeric"})}</span><span className={styles.mobileOnly}>{displayDate(s.date,{day:"numeric"})}<small className={styles.mobileMonth}>{displayDate(s.date,{month:"short"})}</small></span>{s.date===today && <small className={styles.desktopOnly}>Today</small>}</span>
                           <span className={`${styles.cellType} ${s.attempt?styles.cellAttempt:""}`}>{s.attempt?"Attempt":s.trip?"Travel":s.kind}</span>
-                          <strong>{s.title}</strong>
-                          {s.minutes>0 && <span>{s.miles>0?`${s.miles} mi · `:""}~{s.minutes} min</span>}
+                          <strong className={styles.desktopOnly}>{s.title}</strong><strong className={styles.mobileOnly}>{compactTitle(s)}</strong>
+                          {s.minutes>0 && <span><span className={styles.desktopOnly}>{s.miles>0?`${Number(s.miles.toFixed(1))} mi · `:""}~{s.minutes} min</span><span className={styles.mobileOnly}>{s.miles>0?`${Number(s.miles.toFixed(1))}mi`:`${s.minutes}m`}</span></span>}
                           {forecast && <span className={styles.cellWeather} title="Hourly forecast nearest your workout start">
-                            {forecast.time} · {forecast.tempF===null?"Temp unavailable":`${Math.round(forecast.tempF)}°F`}<br/>
-                            ☂ {forecast.rain===null?"Rain chance unavailable":`${Math.round(forecast.rain)}% rain chance`}
+                            <span className={styles.desktopOnly}>{forecast.time} · {forecast.tempF===null?"Temp unavailable":`${Math.round(forecast.tempF)}°F`}<br/>☂ {forecast.rain===null?"Rain chance unavailable":`${Math.round(forecast.rain)}% rain chance`}</span>
+                            <span className={styles.mobileOnly}>{forecast.tempF===null?"—":`${Math.round(forecast.tempF)}°`}<br/>☂{forecast.rain===null?"—":`${Math.round(forecast.rain)}%`}</span>
                           </span>}
-                          {matched && <span className={styles.garminMatch} title="Garmin workout matched" aria-label="Garmin workout matched"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 6V2h6v4M9 18v4h6v-4m-6-10 2 2 4-4"/></svg> Garmin</span>}
-                          {logs.length>0 && <span className={styles.cellLogged}>{logs.some(l=>l.status!=="skipped")?"✓ Logged":"Skipped"}</span>}
+                          {matched && <span className={styles.garminMatch} title="Garmin workout matched" aria-label="Garmin workout matched"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 6V2h6v4M9 18v4h6v-4m-6-10 2 2 4-4"/></svg><span className={styles.desktopOnly}>Garmin</span></span>}
+                          {logs.length>0 && <span className={styles.cellLogged} aria-label={logs.some(l=>l.status!=="skipped")?"Logged":"Skipped"}><span className={styles.desktopOnly}>{logs.some(l=>l.status!=="skipped")?"✓ Logged":"Skipped"}</span><span className={styles.mobileOnly}>{logs.some(l=>l.status!=="skipped")?"✓":"–"}</span></span>}
                         </button>;
                       })}
                       <div className={styles.weekTotals} aria-label={`Week of ${week[0].date}: ${totals.planned.toFixed(1)} miles planned, ${totals.logged.toFixed(1)} miles logged`}>
@@ -650,7 +661,7 @@ export default function TrainingDashboard() {
                 </div>
               </div>
               <p className={styles.formHelp}>{weatherMessage} <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a></p>
-              <p className={styles.formHelp}>Select a day for the purpose, steps, effort targets, and workout log. Swipe horizontally on small screens.</p>
+              <p className={styles.formHelp}>Select a day for the purpose, steps, effort targets, and workout log. On small screens, tap a day for full details. Easy+ includes strength; Ints means intervals. Weather is °F and rain chance.</p>
             </section>
           </>
         )}
