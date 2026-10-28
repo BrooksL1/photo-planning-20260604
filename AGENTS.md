@@ -1,3 +1,5 @@
+The Next.js host is in `photo planning/`. Resolve the local Next.js documentation path below from that directory. The sibling `training plan/` is an npm workspace imported by the host. Run installs and package scripts from the repository root.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

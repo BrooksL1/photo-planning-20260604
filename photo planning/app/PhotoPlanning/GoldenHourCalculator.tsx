@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import SunCalc from "suncalc";
+import { LOCATION_EVENT, refreshGrantedLocation, requestDeviceLocation, savedLocation, saveLocation, type SavedLocation } from "../lib/location";
 import type { SolarEvent, MoonEvent, CelestialEvent } from "./lib/types";
 import { getUpcomingSolarEvents } from "./lib/solarEvents";
 import { getUpcomingMoonEvents, horizonCrossing } from "./lib/moonEvents";
@@ -1050,30 +1051,22 @@ export default function GoldenHourCalculator() {
   function movePin(newLat: number, newLng: number) {
     setLat(newLat);
     setLng(newLng);
+    saveLocation({ lat: newLat, lng: newLng, source: "saved", updatedAt: Date.now() });
   }
 
-  function detectLocation() {
-    if (!navigator.geolocation) {
-      setGeoError("Geolocation not supported by this browser.");
-      return;
-    }
+  async function detectLocation() {
     setLoading(true);
     setGeoError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLat(pos.coords.latitude);
-        setLng(pos.coords.longitude);
-        setLoading(false);
-        setLocationOpen(false);
-      },
-      () => {
-        setGeoError("Location access denied. Search for a location below.");
-        setLoading(false);
-      }
-    );
+    try {
+      const value = await requestDeviceLocation();
+      setLat(value.lat); setLng(value.lng); setLocationOpen(false);
+    } catch (error) {
+      setGeoError(error instanceof Error ? error.message : "Location unavailable. Search for a location below.");
+    } finally { setLoading(false); }
   }
 
   function selectSuggestion(s: PlaceSuggestion) {
+    saveLocation({ lat: s.lat, lng: s.lng, label: s.label, source: "saved", updatedAt: Date.now() });
     setLat(s.lat);
     setLng(s.lng);
     setCityState(s.label);
@@ -1099,11 +1092,17 @@ export default function GoldenHourCalculator() {
     setTimeOpen(false);
   }
 
-  // Ask for the user's location as soon as the app loads, rather than
-  // waiting for a button click.
+  // Restore a place without asking for browser permission on every visit.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial geolocation prompt on mount
-    detectLocation();
+    function restore() {
+      const value: SavedLocation | null = savedLocation();
+      setLat(value?.lat ?? null); setLng(value?.lng ?? null);
+      setCityState(value?.label ?? null); setGeoError(null);
+    }
+    restore();
+    window.addEventListener(LOCATION_EVENT, restore);
+    void refreshGrantedLocation();
+    return () => window.removeEventListener(LOCATION_EVENT, restore);
   }, []);
 
   // Close the location popover on outside click.

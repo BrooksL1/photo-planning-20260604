@@ -1,0 +1,16 @@
+{
+  "name": "@brooksl/training-plan",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    ".": "./src/TrainingDashboard.tsx"
+  },
+  "peerDependencies": {
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19"
+  }
+}

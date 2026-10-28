@@ -1,37 +1,25 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# brooksL tools
 
-## Getting Started
+One domain, one Next.js host, separate tool source folders:
 
-First, run the development server:
+- `photo planning/` hosts `/` (the toolbox), `/PhotoPlanning`, weather APIs, and shared location controls.
+- `training plan/` is the `@brooksl/training-plan` workspace, mounted by the host at `/training`.
+- `lightroom/` is retired and is not linked or built.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+From this directory, run `npm install`, then `npm run dev`. Checks: `npm test`, `npm run typecheck`, and `npm run build`. `npm start` serves a successful production build.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Deploy the repository as an npm workspace. The Next.js project directory is `photo planning`; include source files outside that directory so the sibling training workspace is available. Install dependencies from the repository root with `npm ci`. Do not upload the private calendar import file. Existing domain hosting and production settings have not been changed by this implementation.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The root lockfile is authoritative for the workspace installation. The older app-local lockfile is retained from the folder move; use the root commands above rather than a separate installation inside the app.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Next.js guidance is installed in `photo planning/node_modules/next/dist/docs/`. Read the relevant local guides before changing framework code.
 
-## Learn More
+## Location
 
-To learn more about Next.js, take a look at the following resources:
+A one-year preference cookie uses `Path=/`, `SameSite=Lax`, and `Secure` on HTTPS, with `Domain=brooksl.com` on that domain and its subdomains. Coordinates are stored in browser local storage, never in the cookie. A manually chosen place works without device permission. Device coordinates refresh automatically only while browser permission is already granted; a prompt is requested only after a user clicks a location button. Browser permissions are origin-specific and cannot be granted or made permanent by a cookie.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Training data
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Workout logs, settings, and imported travel dates are kept in the current browser. There is no server database, account system, live calendar sync, or cross-device synchronization. The UI exports JSON backups and merges imports by record ID; current entries win conflicts. Calendar export produces floating local-time `.ics` events and does not write to Google Calendar.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# photo-planning-20260604
+`training plan/private/` is ignored. The private calendar snapshot prepared for this session can be imported using **Travel & settings → Import private calendar file**. It stays out of source control, public assets, and client bundles. Other browsers need their own import or a training backup. Review tentative trips and new travel manually.

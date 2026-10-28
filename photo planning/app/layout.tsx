@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Fraunces } from "next/font/google";
 import "./globals.css";
+import LocationPreference from "./components/LocationPreference";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,8 +20,9 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "brooksl.com — Photography tools",
-  description: "A small collection of photography tools.",
+  title: "brooksL — Tools for a life well spent",
+  description:
+    "Find the light. Put in the work. Photo Planning and Training from brooksL.",
 };
 
 export default function RootLayout({
@@ -33,7 +35,10 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <LocationPreference />
+      </body>
     </html>
   );
 }

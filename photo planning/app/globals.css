@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.location-preference{display:flex;align-items:center;justify-content:space-between;gap:32px;padding:24px max(24px,calc((100vw - 1120px)/2));background:#0d2327;color:#bbc9c3;border-top:1px solid #2e4444;font-size:11px;font-family:var(--font-geist-sans),sans-serif;line-height:1.7}
+.location-preference>div:first-child{max-width:720px}.location-preference strong{font-size:12px;color:#e1e7d7;font-weight:500}.location-preference p{margin:5px 0}.location-preference details{margin-top:7px;font-size:10px}.location-preference summary{cursor:pointer;color:#a4bbab}.location-actions{display:flex;gap:13px;flex-wrap:wrap;align-items:center;min-width:180px;justify-content:flex-end}.location-actions button,.location-actions a{cursor:pointer;color:#ccecaf;background:none;border:0;padding:4px;font-size:10px;text-decoration:none;white-space:nowrap}.location-actions button:first-child{padding:8px 12px;border:1px solid #526c5d;border-radius:3px}.location-actions button:disabled{opacity:.5}.location-preference :focus-visible{outline:2px solid #ccecaf;outline-offset:3px}
+@media(max-width:600px){.location-preference{flex-direction:column;align-items:flex-start;gap:12px;padding:22px}.location-actions{justify-content:flex-start}.location-preference p{font-size:10px}}
