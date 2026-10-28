@@ -1363,3 +1363,6 @@
   .weekNav button { padding: 5px 10px; }
   .calendarScroll { margin-top: 5px; max-height: 65vh; }
 }
+
+.calendarPast { background: #e3e5e4; border-color: #c4cac7; }
+.calendarPast:hover { background: #d7dcda; border-color: #8b9790; }

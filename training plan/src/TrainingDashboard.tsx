@@ -541,7 +541,7 @@ export default function TrainingDashboard() {
                         const matched=logs.some(l=>l.garminIds?.length);
                         const forecast=weather.find(f=>f.date===s.date);
                         return <button key={s.date} type="button" data-week={index===0?s.date:undefined} onClick={()=>openDetails(s)}
-                          className={`${styles.calendarCell} ${s.date===today?styles.calendarToday:""}`}
+                          className={`${styles.calendarCell} ${s.date<today?styles.calendarPast:""} ${s.date===today?styles.calendarToday:""}`}
                           aria-label={`${displayDate(s.date,{weekday:"long",month:"long",day:"numeric"})}: ${s.title}${matched?", Garmin workout matched":""}`}>
                           <span className={styles.cellDate}><span className={styles.desktopOnly}>{displayDate(s.date,{month:"short",day:"numeric"})}</span><span className={styles.mobileOnly}>{displayDate(s.date,{day:"numeric"})}<small className={styles.mobileMonth}>{displayDate(s.date,{month:"short"})}</small></span>{s.date===today && <small className={styles.desktopOnly}>Today</small>}</span>
                           <span className={`${styles.cellType} ${s.attempt?styles.cellAttempt:""}`}>{s.attempt?"Attempt":s.trip?"Travel":s.kind}</span>
