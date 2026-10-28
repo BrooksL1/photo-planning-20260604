@@ -854,6 +854,7 @@ export default function TrainingDashboard() {
                           · {l.status}
                         </p>
                         <h3>{l.title}</h3>
+                        {!!l.garmin?.length && <p>Data from Garmin · {[...new Set(l.garmin.map(a=>a.device))].join(", ")}</p>}
                         <p>
                           {l.minutes ? `${secondsLabel(l.minutes)} · ` : ""}
                           {l.miles ? `${l.miles.toFixed(2)} mi · ` : ""}
@@ -900,8 +901,8 @@ export default function TrainingDashboard() {
             )}
             <div className={styles.backupBar}>
               <p>
-                Logs stay in this browser. Clearing site data removes them.
-                Export regularly; import a backup to move to another device.
+                Published logs sync across devices. Unpublished logs stay in this browser.
+                Export a backup to preserve your notes and local entries.
               </p>
               <button
                 onClick={() => download(data, `road-to-45-${localDate()}.json`)}
@@ -1157,6 +1158,7 @@ export default function TrainingDashboard() {
         <footer className={styles.footer}>
           <a href="/">← All brooksL tools</a>
           <span>Consistency over heroics. Come back tomorrow.</span>
+          {data.logs.some(l=>l.garmin?.length) && <small>Insights derived in part from Garmin device-sourced data.</small>}
         </footer>
       </main>
       <dialog
@@ -1172,7 +1174,7 @@ export default function TrainingDashboard() {
             <dt>Goal</dt><dd>{selected.goal}</dd><dt>Effort / RPE</dt><dd>{selected.rpe}</dd><dt>Heart rate</dt><dd>{selected.heartRate}</dd></dl>
             <h3>What to do</h3><p>{selected.detail}</p>
             <h3>Your record</h3>
-            {data.logs.filter(l=>l.date===selected.date).map(l=><button type="button" key={l.id} className={styles.loggedButton} onClick={()=>openLog(selected,l)}>{l.title} · {l.minutes ? secondsLabel(l.minutes) : "No time"} · {l.miles.toFixed(2)} mi · {l.rpe ? `RPE ${l.rpe}` : "RPE not logged"} · Edit</button>)}
+            {data.logs.filter(l=>l.date===selected.date).map(l=><button type="button" key={l.id} className={styles.loggedButton} onClick={()=>openLog(selected,l)}>{l.title}{l.garmin?.length ? ` · Garmin (${[...new Set(l.garmin.map(a=>a.device))].join(", ")})` : ""} · {l.minutes ? secondsLabel(l.minutes) : "No time"} · {l.miles.toFixed(2)} mi · {l.rpe ? `RPE ${l.rpe}` : "RPE not logged"} · Edit</button>)}
             {!data.logs.some(l=>l.date===selected.date) && <p>No workout logged yet.</p>}
           </div>
           <div className={styles.dialogFooter}><span>Log what you actually did.</span><button type="button" className={styles.primaryButton} onClick={()=>openLog(selected)}>Log this workout ＋</button></div>
