@@ -1381,3 +1381,13 @@
   .weekWeight { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 5px 10px; padding-top: 5px; }
   .weekWeight small { flex-basis: 100%; text-align: right; }
 }
+
+/* Keep weekly mileage and weight readable on the light summary background. */
+.weekTotals { color: #243c34; }
+.weekWeight { font-size: 11px; }
+.weekWeight strong { color: #173d30; font-size: 12px; }
+.weekWeight small { color: #4b6056; }
+@media (max-width: 900px) {
+  .weekWeight { justify-content: space-between; gap: 5px 8px; }
+  .weekWeight small { text-align: left; }
+}

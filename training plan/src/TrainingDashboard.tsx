@@ -563,8 +563,8 @@ export default function TrainingDashboard() {
                       <div className={styles.weekTotals} aria-label={`Week of ${week[0].date}: ${totals.planned.toFixed(1)} miles planned, ${totals.logged.toFixed(1)} miles logged`}>
                         <div className={styles.weekMileage}><span>WEEK TOTAL</span><strong>{totals.planned.toFixed(1)} mi</strong><span>planned</span><strong>{totals.logged.toFixed(1)} mi</strong><span>logged</span></div>
                         <div className={styles.weekWeight} aria-label={`Weight for week ending ${weight.end}`}>
-                          {weight.target!==null && <span>Target <strong>{weight.target} lb</strong></span>}
-                          <span title={`Garmin · arithmetic average of ${weight.count} measurements this Sunday–Saturday week; missing days are excluded.`}>Avg <strong>{weight.average===null?"—":`${weight.average.toFixed(1)} lb`}</strong></span>
+                          <span>Target weight <strong>{weight.target===null?"—":`${weight.target} lb`}</strong></span>
+                          <span title={`Garmin · arithmetic average of ${weight.count} measurements this Sunday–Saturday week; missing days are excluded.`}>Avg weight <strong>{weight.average===null?"—":`${weight.average.toFixed(1)} lb`}</strong></span>
                           <small>{weight.count ? `Garmin · ${weight.count} weigh-in${weight.count===1?"":"s"}` : "No Garmin weigh-ins"}</small>
                         </div>
                       </div>
