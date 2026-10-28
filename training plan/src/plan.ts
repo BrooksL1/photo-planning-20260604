@@ -96,7 +96,7 @@ export const PHASES: Phase[] = [
     focus:
       "Progress partial unpartitioned rehearsals only as recovery allows, toward 50–80 pull-ups, 100–160 push-ups, and 150–240 squats. Introduce goal-pace segments after a successful checkpoint. Keep most running conversational.",
     checkpoint:
-      "For 5K: 3 × 1 km near 4:21/km, 2 min jog. For 10K: 3 × 2 km near 4:30/km, 2 min jog. These are readiness clues, not guarantees.",
+      "For 5K: 3 × 1 km near 7:00/mile, 2 min jog. For 10K: 3 × 2 km near 7:15/mile, 2 min jog. These are readiness clues, not guarantees.",
   },
   {
     title: "Freshen up",
@@ -236,7 +236,7 @@ export function sessionFor(
       minutes: Math.round(short * 10),
       detail: deload
         ? `${short} miles easy. Skip speed work this week.`
-        : `${short} miles total, including warm-up and cooldown. ${work} Start from current fitness (25:00 5K), not goal pace. ${index >= 17 ? "After a successful checkpoint, replace the quality block with 3 × 1 km at 4:21/km OR 2 × 2 km at 4:30/km, with 2 min easy jog; do not add both or add these to the original work." : ""}`,
+        : `${short} miles total, including warm-up and cooldown. ${work} Start from current fitness (25:00 5K), not goal pace. ${index >= 17 ? "After a successful checkpoint, replace the quality block with 3 × 1 km at 7:00/mile OR 2 × 2 km at 7:15/mile, with 2 min easy jog; do not add both or add these to the original work." : ""}`,
     };
   } else if (dow === 3 || dow === 5)
     s = {
@@ -324,7 +324,7 @@ export function sessionFor(
         detail:
           attempt.goal === "Murph"
             ? `Target 57:00. 1 mile + 100 pull-ups / 200 push-ups / 300 air squats + 1 mile, with a 20 lb vest. ${settings.partition === "partitioned" ? "Partition as 20 rounds of 5/10/15; smaller sets are fine." : "Complete each movement before beginning the next."} Attempt RX only after repeated vested practice and normal recovery. Otherwise do a scaled rehearsal. Practice budget: 9 min first mile + 12 min pull-ups + 12 min push-ups + 12 min squats + 10 min final mile + 2 min transitions = 57 min. These are targets, not a reason to rush unsafe reps.`
-            : `Target ${attempt.goal === "5K" ? "7:00/mile (4:21/km), about 21:45 total" : "45:00 (7:15/mile, 4:30/km)"}. Warm up 10–15 min, drills and 4 relaxed strides. Run a measured route, start controlled, then cool down 10 min. The logged miles and time should cover the timed effort only. If the checkpoint is not comfortable, make this a controlled run.`,
+            : `Target ${attempt.goal === "5K" ? "7:00/mile, about 21:45 total" : "45:00 (7:15/mile)"}. Warm up 10–15 min, drills and 4 relaxed strides. Run a measured route, start controlled, then cool down 10 min. The logged miles and time should cover the timed effort only. If the checkpoint is not comfortable, make this a controlled run.`,
       };
     else if (s.kind !== "rest")
       s = recentMurph

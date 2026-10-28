@@ -319,7 +319,7 @@ export default function TrainingDashboard() {
       name: "5K",
       target: "7:00",
       unit: "per mile",
-      sub: "≈ 21:45 finish · 4:21/km",
+      sub: "≈ 21:45 finish · 7:00/mile",
       baseline: "Starting point: 25:00",
       log: results.five,
       met:
@@ -331,7 +331,7 @@ export default function TrainingDashboard() {
       name: "10K",
       target: "45:00",
       unit: "total time",
-      sub: "7:15/mile · 4:30/km",
+      sub: "7:15/mile",
       baseline: "Starting point: not measured",
       log: results.ten,
       met: !!results.ten && results.ten.minutes <= 45,
