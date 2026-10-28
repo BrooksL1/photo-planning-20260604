@@ -20,7 +20,6 @@ import {
   displayDate,
   goalResults,
   localDate,
-  phaseFor,
   secondsLabel,
   sessionFor,
   validateLogs,
@@ -331,7 +330,6 @@ export default function TrainingDashboard() {
     }
     e.target.value = "";
   }
-  const phase = phaseFor(today);
   const focusDate =
     today < START ? START : today >= BIRTHDAY ? "2027-05-10" : today;
   const session = sessionFor(focusDate, data.trips, data.settings);
@@ -352,8 +350,6 @@ export default function TrainingDashboard() {
   function openDetails(s: Session) { setEditing(null); setDetailOnly(true); setSelected(s); }
 
   const results = goalResults(data.logs);
-  const daysLeft = Math.max(0, dayDiff(BIRTHDAY, today));
-  const nextAttempt = ATTEMPTS.find((a) => a.date >= today);
 
   function updateSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
     if (key === "morning" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(value))) {
@@ -464,60 +460,18 @@ export default function TrainingDashboard() {
         </a>
       </header>
       <main className={styles.main}>
-        <div className={styles.intro}>
-          <div>
-            <p className={styles.eyebrow}>
-              THE BIRTHDAY PROJECT · MAY 11, 2027
-            </p>
-            <h1>
-              The road to <em>45.</em>
-            </h1>
-            <p className={styles.lede}>
-              Three challenges. Six mornings a week.
-              <br />
-              Show up, put in the work, write it down.
-            </p>
-          </div>
-          <div className={styles.countdown}>
-            <strong>{ready ? daysLeft : "—"}</strong>
-            <span>DAYS TO 45</span>
-            <small>Oct 27 → May 11</small>
-          </div>
+        <div className={styles.logHeader}>
+          <h1>Training log</h1>
+          <button className={styles.primaryButton} disabled={!ready} onClick={()=>openLog(session)}>Log today ＋</button>
         </div>
-        <section aria-label="Birthday challenge goals" className={styles.goals}>
-          {goals.map((g, i) => (
-            <article className={styles.goal} key={g.name}>
-              <div className={styles.goalTop}>
-                <span className={styles.eyebrow}>{g.label}</span>
-                <span className={styles.goalNumber}>0{i + 1}</span>
-              </div>
-              <h2>{g.name}</h2>
-              <div className={styles.target}>
-                {g.target}
-                <span>{g.unit}</span>
-              </div>
-              <p>{g.sub}</p>
-              <div className={styles.goalBottom}>
-                <span className={g.met ? styles.achieved : styles.goalStatus}>
-                  {g.met
-                    ? "✓ Goal logged"
-                    : g.log
-                      ? `Best logged: ${secondsLabel(g.log.minutes)}`
-                      : "Goal ahead"}
-                </span>
-                <small>{g.baseline}</small>
-              </div>
-            </article>
-          ))}
-        </section>
         <div className={styles.toolbar}>
           <nav aria-label="Training views" className={styles.tabs}>
             {(
               [
                 ["week", "Calendar"],
-                ["roadmap", "The plan"],
-                ["journal", "Workout log"],
-                ["settings", "Travel & settings"],
+                ["roadmap", "Plan"],
+                ["journal", "History"],
+                ["settings", "Settings"],
               ] as const
             ).map(([key, label]) => (
               <button
@@ -530,22 +484,9 @@ export default function TrainingDashboard() {
               </button>
             ))}
           </nav>
-          <span className={styles.localBadge}>
-            <span /> {cloud ? "Editing unlocked" : "Saved on this device"}
-          </span>
         </div>
-        <p className={styles.notice} role="status" aria-live="polite">
-          {notice ||
-            (!ready
-              ? "Opening your journal…"
-              : "Workout history is public. Publishing edits requires your personal editing link.")}
-        </p>
-        <section className={styles.syncBar} aria-label="Garmin and workout history">
-          <div><strong>Garmin + workout history</strong><p role="status">{syncMessage}</p></div>
-          <button type="button" onClick={()=>void refreshCloud()} disabled={syncBusy}>{syncBusy ? "Refreshing…" : "Refresh history"}</button>
-          {cloud && <button type="button" onClick={async()=>{await saveQueue.current;await fetch("/api/training/session",{method:"DELETE"});cloudRef.current=false;setCloud(false);setSyncMessage("Editing locked. Public history remains visible; your local copy stays on this device.");}}>Lock editing</button>}
-        </section>
-        {!data.calendarReviewed && ready && (
+        {notice && <p className={styles.notice} role="status" aria-live="polite">{notice}</p>}
+        {tab === "settings" && !data.calendarReviewed && ready && (
           <div className={styles.importNotice}>
             <div>
               <strong>Bring your calendar into the plan.</strong>
@@ -578,54 +519,15 @@ export default function TrainingDashboard() {
         />
         {tab === "week" && (
           <>
-            <section className={styles.today}>
-              <div className={styles.todayBody}>
-                <p className={styles.eyebrow}>
-                  {today === focusDate ? "TODAY" : "TRAINING BLOCK"} ·{" "}
-                  {displayDate(focusDate, {
-                    weekday: "long",
-                    month: "short",
-                    day: "numeric",
-                  })}{" "}
-                  · {data.settings.morning}
-                </p>
-                <div className={styles.todayHeading}>
-                  <span className={styles.sessionSymbol}>↗</span>
-                  <h2>{session.title}</h2>
-                </div>
-                <p>{session.detail}</p>
-                <button
-                  className={styles.primaryButton}
-                  disabled={!ready}
-                  onClick={() => openLog(session)}
-                >
-                  Log this morning <span>＋</span>
-                </button>
-              </div>
-              <aside className={styles.todayAside}>
-                <p className={styles.eyebrow}>CURRENT CHAPTER</p>
-                <h3>{phase.title}</h3>
-                <p>{phase.focus}</p>
-                <span>
-                  {nextAttempt
-                    ? `Next attempt · ${displayDate(nextAttempt.date)} · ${nextAttempt.goal}`
-                    : "Challenge block complete"}
-                </span>
-              </aside>
-            </section>
             <section className={styles.weekSection}>
               <div className={styles.sectionHeading}>
                 <div>
-                  <p className={styles.eyebrow}>YOUR TRAINING CALENDAR</p>
-                  <h2>
-                    Week by week
-                  </h2>
+                  <h2>Calendar</h2>
                 </div>
                 <div className={styles.weekNav}>
                   <button onClick={() => {setCalendarFocus(today);scrollToDate(today);}}>Today</button>
                 </div>
               </div>
-              <p className={styles.formHelp}>Scroll up for past weeks and down for upcoming workouts. Each week runs Sunday through Saturday.</p>
               <div className={styles.calendarScroll} ref={calendarRef} tabIndex={0} aria-label="Scrollable training calendar">
                 <div className={styles.calendarGrid} aria-label="Weekly workout calendar">
                   <div className={styles.calendarHeader} data-calendar-header>
@@ -661,12 +563,38 @@ export default function TrainingDashboard() {
                 </div>
               </div>
               <p className={styles.formHelp}>{weatherMessage} <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a></p>
-              <p className={styles.formHelp}>Select a day for the purpose, steps, effort targets, and workout log. On small screens, tap a day for full details. Easy+ includes strength; Ints means intervals. Weather is °F and rain chance.</p>
+              <p className={styles.formHelp}>Scroll up for past weeks. Tap a day for workout details and logging. On small screens, tap a day for full details. Easy+ includes strength; Ints means intervals. Weather is °F and rain chance.</p>
             </section>
           </>
         )}
         {tab === "roadmap" && (
           <section className={styles.roadmap}>
+        <section aria-label="Birthday challenge goals" className={styles.goals}>
+          {goals.map((g, i) => (
+            <article className={styles.goal} key={g.name}>
+              <div className={styles.goalTop}>
+                <span className={styles.eyebrow}>{g.label}</span>
+                <span className={styles.goalNumber}>0{i + 1}</span>
+              </div>
+              <h2>{g.name}</h2>
+              <div className={styles.target}>
+                {g.target}
+                <span>{g.unit}</span>
+              </div>
+              <p>{g.sub}</p>
+              <div className={styles.goalBottom}>
+                <span className={g.met ? styles.achieved : styles.goalStatus}>
+                  {g.met
+                    ? "✓ Goal logged"
+                    : g.log
+                      ? `Best logged: ${secondsLabel(g.log.minutes)}`
+                      : "Goal ahead"}
+                </span>
+                <small>{g.baseline}</small>
+              </div>
+            </article>
+          ))}
+        </section>
             <div className={styles.sectionHeading}>
               <div>
                 <p className={styles.eyebrow}>OCTOBER 27 → MAY 11</p>
@@ -1159,9 +1087,17 @@ export default function TrainingDashboard() {
             </div>
           </section>
         )}
+        <details className={styles.syncDetails}>
+          <summary>Sync &amp; editing · {cloud ? "Editing unlocked" : "Public view"}</summary>
+          <section className={styles.syncBar} aria-label="Garmin and workout history">
+            <div><strong>Garmin + workout history</strong><p role="status">{syncMessage}</p></div>
+            <button type="button" onClick={()=>void refreshCloud()} disabled={syncBusy}>{syncBusy ? "Refreshing…" : "Refresh history"}</button>
+            {cloud && <button type="button" onClick={async()=>{await saveQueue.current;await fetch("/api/training/session",{method:"DELETE"});cloudRef.current=false;setCloud(false);setSyncMessage("Editing locked. Public history remains visible; your local copy stays on this device.");}}>Lock editing</button>}
+          </section>
+          <p>Workout history is public. Use your personal editing link to publish changes; otherwise logs stay on this device.</p>
+        </details>
         <footer className={styles.footer}>
           <a href="/">← All brooksL tools</a>
-          <span>Consistency over heroics. Come back tomorrow.</span>
           {data.logs.some(l=>l.garmin?.length) && <small>Insights derived in part from Garmin device-sourced data.</small>}
         </footer>
       </main>

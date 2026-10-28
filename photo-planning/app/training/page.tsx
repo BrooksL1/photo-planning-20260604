@@ -1,9 +1,9 @@
 import TrainingDashboard from "@brooksl/training-plan";
 
 export const metadata = {
-  title: "The road to 45 | brooksL",
+  title: "Training log | brooksL",
   description:
-    "Six mornings a week. Three challenges. A training plan and workout journal.",
+    "Workout calendar, training records, and Garmin activity history.",
 };
 
 export default function TrainingPage() {

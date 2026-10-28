@@ -1334,3 +1334,32 @@
   .weekTotals > span:first-child { margin-right: auto; font-size: 8px; letter-spacing: 0; }
   .weekTotals > strong { font-size: 10px; }
 }
+
+/* The log and calendar are the primary workflow. */
+.logHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 22px 0 12px; }
+.logHeader h1 { font-size: 26px; font-weight: 600; letter-spacing: -.5px; }
+.logHeader .primaryButton { padding: 9px 14px; font-size: 12px; }
+.toolbar { margin-top: 0; margin-bottom: 12px; }
+.weekSection { margin-top: 0; }
+.weekSection .sectionHeading { margin-bottom: 8px; }
+.weekSection .sectionHeading h2 { font-size: 20px; }
+.calendarScroll { margin-top: 8px; }
+.syncDetails { margin: 18px 0; padding: 12px 0; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.syncDetails summary { cursor: pointer; }
+.syncDetails > p { font-size: 11px; }
+.roadmap > .goals { margin: 16px 0 28px; }
+@media (max-width: 900px) {
+  .header { padding: 12px 16px; }
+  .brand { font-size: 20px; }
+  .main { padding: 0 12px; }
+  .logHeader { padding: 14px 0 10px; }
+  .logHeader h1 { font-size: 22px; }
+  .toolbar { margin: 0 0 10px; padding: 0; }
+  .tabs { width: 100%; gap: 0; overflow: visible; }
+  .tabs button { flex: 1; padding: 9px 4px; font-size: 12px; white-space: nowrap; }
+  .weekSection { margin-top: 0; }
+  .weekSection .sectionHeading { flex-direction: row; align-items: center; margin-bottom: 5px; }
+  .weekSection .sectionHeading h2 { font-size: 16px; }
+  .weekNav button { padding: 5px 10px; }
+  .calendarScroll { margin-top: 5px; max-height: 65vh; }
+}
