@@ -32,7 +32,7 @@ Use `kind: "ski"` for days when skiing replaces leg training. Imported data is a
 
 ## Public history and personal editing
 
-The seven-column monthly calendar opens workout details and a logging form. Effort cues use the owner's reported HR/RPE anchors, not measured physiological zones. All running paces are per mile.
+The continuous calendar opens at the current Sunday–Saturday week, with past weeks available by scrolling upward. Each row ends with planned and logged mileage; Garmin-linked records show a watch icon. The next two upcoming mornings show temperature in Fahrenheit and precipitation probability at the configured workout start, using Open-Meteo and the shared device/saved location. Missing forecast values remain unavailable. Click a day for workout details and a logging form. Effort cues use the owner's reported HR/RPE anchors, not measured physiological zones. All running paces are per mile.
 
 Workout statistics are publicly readable at `/api/training/history`. Travel, notes, credentials, and GPS tracks are excluded. The journal and normalized Garmin source remain in private Vercel Blob storage. A personal editing link exchanges its URL fragment for a secure, HttpOnly, SameSite cookie. Production requires `TRAINING_ACCESS_HASH` and `BLOB_READ_WRITE_TOKEN`. Conditional ETags reject concurrent stale saves; local backups remain available.
 

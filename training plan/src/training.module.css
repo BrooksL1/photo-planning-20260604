@@ -1301,3 +1301,14 @@
 .syncBar > div { flex:1; min-width:220px; }
 .syncBar p { margin:5px 0; line-height:1.6; }
 .syncBar button { border:1px solid #829671; border-radius:5px; padding:8px 12px; background:#fffef8; cursor:pointer; }
+
+.calendarScroll { position: relative; overflow: auto; max-height: 620px; scrollbar-gutter: stable; overflow-anchor: none; }
+.calendarGrid { grid-template-columns: repeat(7, minmax(120px, 1fr)) 108px; min-width: 988px; }
+.calendarHeader { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; position: sticky; top: 0; z-index: 2; background: #faf9f1; box-shadow: 0 1px 0 #d9ddd2; }
+.weekTotals { display: flex; flex-direction: column; gap: 8px; justify-content: center; padding: 12px; background: #eef2e7; border: 1px solid #d9ddd2; border-radius: 8px; font-size: 11px; }
+.weekTotals > strong { font-size: 17px; }
+.weekTotals > span:first-child { font-size: 9px; letter-spacing: .6px; }
+.garminMatch { display: flex; gap: 5px; align-items: center; color: #276b80; font-weight: 600; }
+.cellWeather { padding: 7px 0; color: #395b73; line-height: 1.7; border-top: 1px solid #e1e6dc; }
+.calendarScroll:focus-visible { outline: 2px solid #5c7c40; outline-offset: 2px; }
+@media(max-width:600px) { .calendarScroll { max-height: 560px; } }

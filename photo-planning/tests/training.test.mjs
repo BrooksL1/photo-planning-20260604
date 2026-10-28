@@ -220,3 +220,27 @@ test("Garmin attaches to a unique matching manual record and preserves manual sp
   assert.equal(mergeGarmin([manual,{...manual,id:"second"}],[activity],[],DEFAULT_SETTINGS).length,3);
   assert.equal(validActivities([{...activity,avgHr:999}]),false);
 });
+
+const {sunday,weeklyMiles,nextMorningForecasts}=load("../../training plan/src/calendar.ts");
+test("calendar weeks run Sunday through Saturday across month and DST boundaries",()=>{
+  assert.equal(sunday("2026-11-01"),"2026-11-01");
+  assert.equal(sunday("2026-11-07"),"2026-11-01");
+  assert.equal(sunday("2027-01-01"),"2026-12-27");
+  const sessions=Array.from({length:7},(_,i)=>sessionFor(addDays("2026-11-01",i)));
+  const base=mergeGarmin([],[activity],[],DEFAULT_SETTINGS)[0];
+  const totals=weeklyMiles(sessions,[{...base,date:"2026-11-01",miles:8},{...base,date:"2026-11-07",miles:2},{...base,date:"2026-11-08",miles:99},{...base,date:"2026-11-04",miles:99,status:"skipped"}]);
+  assert.equal(totals.logged,10);
+  assert.equal(totals.planned,22);
+});
+test("morning forecasts select upcoming workout mornings in the location timezone",()=>{
+  const forecast={timezone:"America/New_York",hourly:{time:["2026-10-28T06:00","2026-10-29T06:00","2026-10-30T06:00"],temperature_2m:[50,null,55],precipitation_probability:[0,25,null]}};
+  const before=nextMorningForecasts(forecast,"06:00",new Date("2026-10-28T09:00:00Z"));
+  assert.deepEqual(before.map(f=>f.date),["2026-10-28","2026-10-29"]);
+  assert.equal(before[0].rain,0);
+  const after=nextMorningForecasts(forecast,"06:00",new Date("2026-10-28T17:00:00Z"));
+  assert.deepEqual(after.map(f=>f.date),["2026-10-29","2026-10-30"]);
+  assert.equal(after[0].tempF,null);
+  assert.equal(after[1].rain,null);
+  const absent=nextMorningForecasts(forecast,"10:00",new Date("2026-10-28T17:00:00Z"));
+  assert.equal(absent[0].tempF,null);
+});

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -19,7 +20,6 @@ import {
   displayDate,
   goalResults,
   localDate,
-  monday,
   phaseFor,
   secondsLabel,
   sessionFor,
@@ -31,6 +31,8 @@ import {
   type Workout,
 } from "./plan";
 import styles from "./training.module.css";
+import { sunday, weeklyMiles } from "./calendar";
+import { useMorningWeather } from "./useMorningWeather";
 import { mergeGarmin, validActivities } from "./garmin";
 
 function sMiles(s: Session) { return s.miles ? ` · ${s.miles} planned miles` : ""; }
@@ -118,12 +120,14 @@ export default function TrainingDashboard() {
   const refreshing = useRef(false);
   const [notice, setNotice] = useState("");
   const [today, setToday] = useState(START);
-  const [week, setWeek] = useState(monday(START));
+
   const [tab, setTab] = useState<"week" | "roadmap" | "journal" | "settings">(
     "week",
   );
   const [detailOnly, setDetailOnly] = useState(false);
-  const [month, setMonth] = useState(START.slice(0, 7) + "-01");
+  const [calendarFocus, setCalendarFocus] = useState(START);
+  const calendarRef = useRef<HTMLDivElement>(null);
+  const {weather, message:weatherMessage} = useMorningWeather(data.settings.morning);
   const [selected, setSelected] = useState<Session | null>(null);
   const [editing, setEditing] = useState<Workout | null>(null);
   const [timeText, setTimeText] = useState("");
@@ -140,8 +144,7 @@ export default function TrainingDashboard() {
   useEffect(() => {
     const now = localDate();
     setToday(now);
-    setMonth((now < START ? START : now >= BIRTHDAY ? "2027-05-01" : now).slice(0, 7) + "-01");
-    setWeek(monday(now < START ? START : now >= BIRTHDAY ? "2027-05-04" : now));
+    setCalendarFocus(now);
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -321,26 +324,26 @@ export default function TrainingDashboard() {
   const focusDate =
     today < START ? START : today >= BIRTHDAY ? "2027-05-10" : today;
   const session = sessionFor(focusDate, data.trips, data.settings);
-  const calendarStart = monday(month);
-  const calendarSessions = Array.from({ length: 42 }, (_, i) => sessionFor(addDays(calendarStart, i), data.trips, data.settings));
-  const sessions = calendarSessions.filter(s => s.date.slice(0, 7) === month.slice(0, 7));
-  function moveMonth(delta: number) {
-    const d = new Date(`${month}T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + delta);
-    setMonth(d.toISOString().slice(0, 10));
+  const earliest = data.logs.reduce((date,l)=>l.date < date ? l.date : date, START);
+  const calendarStart = sunday(addDays(earliest < today ? earliest : today, -28));
+  const calendarEnd = addDays(sunday(BIRTHDAY > today ? BIRTHDAY : today), 41);
+  const calendarWeeks = Array.from({length:Math.ceil((dayDiff(calendarEnd,calendarStart)+1)/7)},(_,w)=>
+    Array.from({length:7},(_,d)=>sessionFor(addDays(calendarStart,w*7+d),data.trips,data.settings)));
+  function scrollToDate(date: string) {
+    const container = calendarRef.current;
+    const row = container?.querySelector<HTMLElement>(`[data-week="${sunday(date)}"]`);
+    const header = container?.querySelector<HTMLElement>("[data-calendar-header]");
+    if(container && row) container.scrollTop = row.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - (header?.offsetHeight ?? 0) - 6;
   }
+  useEffect(()=>{
+    if(ready && tab==="week") scrollToDate(calendarFocus);
+  },[ready,tab,calendarFocus,calendarStart,data.trips]);
   function openDetails(s: Session) { setEditing(null); setDetailOnly(true); setSelected(s); }
 
-  const weekLogs = data.logs.filter(
-    (l) =>
-      l.date.slice(0, 7) === month.slice(0, 7) && l.status !== "skipped",
-  );
-  const totalMiles = weekLogs.reduce((n, l) => n + l.miles, 0);
-  const plannedMiles = sessions.reduce((n, s) => n + s.miles, 0);
-  const loggedDays = new Set(weekLogs.map((l) => l.date)).size;
   const results = goalResults(data.logs);
   const daysLeft = Math.max(0, dayDiff(BIRTHDAY, today));
   const nextAttempt = ATTEMPTS.find((a) => a.date >= today);
-  const lastWeek = monday("2027-05-10");
+
   function updateSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
     if (key === "morning" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(value))) {
       setNotice("Choose a valid morning start time.");
@@ -604,59 +607,49 @@ export default function TrainingDashboard() {
                 <div>
                   <p className={styles.eyebrow}>YOUR TRAINING CALENDAR</p>
                   <h2>
-                    {displayDate(month, { month: "long", year: "numeric" })}
+                    Week by week
                   </h2>
                 </div>
                 <div className={styles.weekNav}>
-                  <button
-                    aria-label="Previous month"
-                    disabled={month <= START.slice(0, 7) + "-01"}
-                    onClick={() => moveMonth(-1)}
-                  >
-                    ←
-                  </button>
-                  <button onClick={() => setMonth(focusDate.slice(0, 7) + "-01")}>
-                    Today
-                  </button>
-                  <button
-                    aria-label="Next month"
-                    disabled={month >= "2027-05-01"}
-                    onClick={() => moveMonth(1)}
-                  >
-                    →
-                  </button>
+                  <button onClick={() => {setCalendarFocus(today);scrollToDate(today);}}>Today</button>
                 </div>
               </div>
-              <div className={styles.weekStats}>
-                <span>
-                  <strong>{loggedDays}</strong> days logged
-                </span>
-                <span>
-                  <strong>{totalMiles.toFixed(1)}</strong> miles logged
-                </span>
-                <span>
-                  <strong>{plannedMiles.toFixed(1)}</strong> miles planned
-                </span>
-                <span>Saturday · full rest</span>
-              </div>
-              <div className={styles.calendarScroll}>
-                <div className={styles.calendarGrid} aria-label="Monthly workout calendar">
-                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(day => <div className={styles.weekday} key={day}>{day}</div>)}
-                  {calendarSessions.map(s => {
-                    const logs = data.logs.filter(l => l.date === s.date);
-                    const outside = s.date.slice(0, 7) !== month.slice(0, 7);
-                    return <button key={s.date} type="button" onClick={() => openDetails(s)}
-                      className={`${styles.calendarCell} ${outside ? styles.outsideMonth : ""} ${s.date === today ? styles.calendarToday : ""}`}
-                      aria-label={`${displayDate(s.date, {weekday:"long", month:"long",day:"numeric"})}: ${s.title}`}>
-                      <span className={styles.cellDate}>{displayDate(s.date, {day:"numeric"})}{s.date === today && <small>Today</small>}</span>
-                      <span className={`${styles.cellType} ${s.attempt ? styles.cellAttempt : ""}`}>{s.attempt ? "Attempt" : s.trip ? "Travel" : s.kind}</span>
-                      <strong>{s.title}</strong>
-                      {s.minutes > 0 && <span>{s.miles > 0 ? `${s.miles} mi · ` : ""}~{s.minutes} min</span>}
-                      {logs.length > 0 && <span className={styles.cellLogged}>{logs.some(l=>l.status !== "skipped") ? "✓ Logged" : "Skipped"}</span>}
-                    </button>;
+              <p className={styles.formHelp}>Scroll up for past weeks and down for upcoming workouts. Each week runs Sunday through Saturday.</p>
+              <div className={styles.calendarScroll} ref={calendarRef} tabIndex={0} aria-label="Scrollable training calendar">
+                <div className={styles.calendarGrid} aria-label="Weekly workout calendar">
+                  <div className={styles.calendarHeader} data-calendar-header>
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Week totals"].map(day => <div className={styles.weekday} key={day}>{day}</div>)}
+                  </div>
+                  {calendarWeeks.map(week => {
+                    const totals = weeklyMiles(week,data.logs);
+                    return <Fragment key={week[0].date}>
+                      {week.map((s,index) => {
+                        const logs=data.logs.filter(l=>l.date===s.date);
+                        const matched=logs.some(l=>l.garminIds?.length);
+                        const forecast=weather.find(f=>f.date===s.date);
+                        return <button key={s.date} type="button" data-week={index===0?s.date:undefined} onClick={()=>openDetails(s)}
+                          className={`${styles.calendarCell} ${s.date===today?styles.calendarToday:""}`}
+                          aria-label={`${displayDate(s.date,{weekday:"long",month:"long",day:"numeric"})}: ${s.title}${matched?", Garmin workout matched":""}`}>
+                          <span className={styles.cellDate}>{displayDate(s.date,{month:"short",day:"numeric"})}{s.date===today && <small>Today</small>}</span>
+                          <span className={`${styles.cellType} ${s.attempt?styles.cellAttempt:""}`}>{s.attempt?"Attempt":s.trip?"Travel":s.kind}</span>
+                          <strong>{s.title}</strong>
+                          {s.minutes>0 && <span>{s.miles>0?`${s.miles} mi · `:""}~{s.minutes} min</span>}
+                          {forecast && <span className={styles.cellWeather} title="Hourly forecast nearest your workout start">
+                            {forecast.time} · {forecast.tempF===null?"Temp unavailable":`${Math.round(forecast.tempF)}°F`}<br/>
+                            ☂ {forecast.rain===null?"Rain chance unavailable":`${Math.round(forecast.rain)}% rain chance`}
+                          </span>}
+                          {matched && <span className={styles.garminMatch} title="Garmin workout matched" aria-label="Garmin workout matched"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 6V2h6v4M9 18v4h6v-4m-6-10 2 2 4-4"/></svg> Garmin</span>}
+                          {logs.length>0 && <span className={styles.cellLogged}>{logs.some(l=>l.status!=="skipped")?"✓ Logged":"Skipped"}</span>}
+                        </button>;
+                      })}
+                      <div className={styles.weekTotals} aria-label={`Week of ${week[0].date}: ${totals.planned.toFixed(1)} miles planned, ${totals.logged.toFixed(1)} miles logged`}>
+                        <span>WEEK TOTAL</span><strong>{totals.planned.toFixed(1)} mi</strong><span>planned</span><strong>{totals.logged.toFixed(1)} mi</strong><span>logged</span>
+                      </div>
+                    </Fragment>;
                   })}
                 </div>
               </div>
+              <p className={styles.formHelp}>{weatherMessage} <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a></p>
               <p className={styles.formHelp}>Select a day for the purpose, steps, effort targets, and workout log. Swipe horizontally on small screens.</p>
             </section>
           </>
@@ -678,7 +671,7 @@ export default function TrainingDashboard() {
               pull-up bar, bodyweight, and a vest after readiness. No injuries
               were reported. The targets are ambitious; checkpoints guide
               progression rather than promise a result. Six scheduled mornings
-              means four runs and two strength sessions in the build, with
+              means five runs and three strength exposures in the build, with
               Saturday off. Sundays can take 90–110 minutes.
             </p>
             <div className={styles.phases}>
@@ -697,7 +690,7 @@ export default function TrainingDashboard() {
                     </div>
                     <button
                       onClick={() => {
-                        setWeek(monday(p.start)); setMonth(p.start.slice(0, 7) + "-01");
+                        setCalendarFocus(p.start);
                         setTab("week");
                       }}
                     >
@@ -715,7 +708,7 @@ export default function TrainingDashboard() {
                 <button
                   key={a.date}
                   onClick={() => {
-                    setWeek(monday(a.date)); setMonth(a.date.slice(0, 7) + "-01");
+                    setCalendarFocus(a.date);
                     setTab("week");
                   }}
                 >
