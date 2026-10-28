@@ -56,10 +56,12 @@ export default function Home() {
         <section id="tools" className={styles.tools} aria-label="Tools">
           <div className={styles.sectionLabel}>
             <span>THE TOOLBOX</span>
-            <span>01 — 03</span>
+            <span className={styles.desktopCount}>01 — 03</span>
+            <span className={styles.mobileCount}>02 TOOLS / 06 SPACES</span>
           </div>
           <Link
             href="/PhotoPlanning"
+            prefetch={false}
             className={`${styles.tool} ${styles.photo}`}
           >
             <div className={styles.toolIcon}>
@@ -83,8 +85,10 @@ export default function Home() {
               <span>THE BEST LIGHT IS AHEAD.</span>
             </div>
           </Link>
+          <div className={styles.emptySlot} aria-label="Space for a future tool"><span>Future tool</span></div>
           <Link
             href="/training"
+            prefetch={false}
             className={`${styles.tool} ${styles.training}`}
           >
             <div className={styles.toolIcon}>
@@ -108,6 +112,7 @@ export default function Home() {
               <span>THREE GOALS. ONE MORNING AT A TIME.</span>
             </div>
           </Link>
+          <div className={styles.emptySlot} aria-label="Space for a future tool"><span>Future tool</span></div>
           <article className={`${styles.tool} ${styles.future}`}>
             <span className={styles.futureIcon}>＋</span>
             <div>
@@ -116,7 +121,9 @@ export default function Home() {
               <p>More tools will find a home here.</p>
             </div>
             <span className={styles.soon}>TO BE CONTINUED</span>
+            <span className={styles.mobileFuture}>Future tool</span>
           </article>
+          <div className={styles.emptySlot} aria-label="Space for a future tool"><span>Future tool</span></div>
         </section>
         <footer className={styles.footer}>
           <span>brooksL.com</span>

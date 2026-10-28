@@ -362,118 +362,132 @@
     font-size: 27px;
   }
 }
+/* Empty spaces are reserved on the compact mobile toolbox only. */
+.emptySlot,
+.mobileCount,
+.mobileFuture {
+  display: none;
+}
+
 @media (max-width: 600px) {
+  .home {
+    min-height: auto;
+    background: #f7f8f5;
+    color: #203b36;
+    --line: #dce3dc;
+  }
   .header {
-    padding: 20px 22px;
+    padding: 18px 20px;
   }
-  .header > span {
+  .brand span {
+    color: #567659;
+  }
+  .header > span,
+  .header > a:last-child,
+  .intro,
+  .desktopCount {
     display: none;
-  }
-  .header > a:last-child {
-    font-size: 10px;
   }
   .main {
-    padding: 0 22px;
+    padding: 0 16px;
   }
-  .intro {
-    padding: 48px 0 40px;
-  }
-  .introLabel {
-    font-size: 7px;
-    letter-spacing: 1.3px;
-  }
-  .intro h1 {
-    font-size: 49px;
-    letter-spacing: -2.5px;
-    margin: 23px 0;
-  }
-  .intro > p {
-    font-size: 11px;
-  }
-  .heroDetail {
-    display: none;
+  .tools {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding-top: 20px;
   }
   .sectionLabel {
+    grid-column: 1 / -1;
+    padding: 0 0 4px;
+    border: 0;
     font-size: 8px;
+    letter-spacing: 1px;
+    color: #52695c;
   }
-  .tool {
-    padding: 28px 0;
-    gap: 15px;
-    flex-wrap: wrap;
+  .mobileCount {
+    display: inline;
   }
-  .toolIcon {
-    width: 38px;
-    height: 38px;
-    margin-top: 22px;
-    margin-left: 0;
+  .tool,
+  .emptySlot {
+    min-width: 0;
+    height: clamp(112px, 22svh, 156px);
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    background: #fff;
+    transition: none;
+  }
+  .tool:has(.open):hover {
+    background: #edf2e9;
+  }
+  .home a:focus-visible {
+    outline: 2px solid #42674c;
+    outline-offset: 3px;
+  }
+  .toolIcon,
+  .training .toolIcon {
+    width: 32px;
+    height: 32px;
+    margin: 0;
+    color: #52705b;
+  }
+  .photo .toolIcon {
+    color: #97652f;
   }
   .toolBody {
-    min-width: 210px;
+    min-width: 0;
     padding: 0;
-  }
-  .number {
-    font-size: 8px;
+    flex: none;
   }
   .tool h2 {
-    font-size: 27px;
-    margin: 10px 0;
+    font-size: clamp(15px, 4vw, 20px);
+    line-height: 1.2;
+    letter-spacing: -.4px;
+    font-weight: 600;
+    margin: 0;
   }
-  .tool p {
-    font-size: 11px;
+  .toolBody::after {
+    content: "↗";
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    color: #627868;
+    font-size: 16px;
   }
-  .open {
-    margin-top: 15px;
-    font-size: 10px;
-  }
+  .number,
+  .tool p,
+  .open,
   .photoArt,
-  .trainingArt {
-    width: 100%;
-    height: 150px;
-    margin-top: 9px;
-    min-width: 0;
-  }
-  .sun {
-    width: 60px;
-    height: 60px;
-    top: 20px;
-    left: calc(50% - 30px);
-  }
-  .horizon {
-    top: 79px;
-  }
-  .hill {
-    top: 128px;
-    left: -40px;
-    width: 600px;
-  }
-  .photoArt > span {
-    font-size: 7px;
-    bottom: 16px;
-  }
-  .trainingArt > strong {
-    font-size: 95px;
-    line-height: 1.05;
-  }
-  .trainingArt > span {
-    margin-top: 8px;
-    font-size: 6px;
-  }
-  .future {
-    gap: 15px;
-    flex-wrap: nowrap;
-    padding: 25px 0;
-  }
-  .futureIcon {
-    min-width: 38px;
-  }
-  .future h2 {
-    font-size: 17px;
-  }
+  .trainingArt,
+  .futureIcon,
+  .future > div,
   .soon {
     display: none;
   }
+  .future,
+  .emptySlot {
+    background: transparent;
+    border-style: dashed;
+    justify-content: flex-end;
+    color: #6a786d;
+    font-size: 11px;
+  }
+  .mobileFuture {
+    display: inline;
+  }
   .footer {
+    padding: 20px 0;
+    gap: 12px;
     font-size: 9px;
-    padding: 25px 0;
+    color: #657568;
+  }
+  .footer > span:first-child {
+    color: #425b4a;
   }
 }
