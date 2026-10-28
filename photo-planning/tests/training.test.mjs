@@ -35,7 +35,7 @@ test("six attempts start exactly six weeks before the birthday and rotate twice"
   );
   for (const a of ATTEMPTS) assert.equal(sessionFor(a.date).attempt, a.goal);
 });
-test("complete weeks have six mornings, Saturday rest, and 25 baseline running miles", () => {
+test("complete weeks have six mornings, Saturday rest, and 22 baseline running miles", () => {
   for (let week = "2026-11-02"; week < "2027-05-04"; week = addDays(week, 7)) {
     const sessions = Array.from({ length: 7 }, (_, i) =>
       sessionFor(addDays(week, i)),
@@ -48,7 +48,7 @@ test("complete weeks have six mornings, Saturday rest, and 25 baseline running m
   );
   assert.equal(
     baseline.reduce((n, s) => n + s.miles, 0),
-    25,
+    22,
   );
   assert.equal(sessionFor(START).date, START);
   assert.equal(sessionFor(BIRTHDAY).kind, "rest");
@@ -83,7 +83,7 @@ test("travel reduces load, respects inclusive end dates, and returns gently", ()
       ...DEFAULT_SETTINGS,
       includeTentative: false,
     }).miles,
-    10,
+    8,
   );
 });
 test("a travel conflict cannot silently remain a challenge attempt", () => {
@@ -104,7 +104,7 @@ test("a travel conflict cannot silently remain a challenge attempt", () => {
 });
 test("unpartitioned Murph is the default and its aftermath replaces harder sessions", () => {
   assert.equal(DEFAULT_SETTINGS.partition, "unpartitioned");
-  assert.match(sessionFor("2027-03-04").detail, /THEN/);
+  assert.match(sessionFor("2027-03-03").detail, /THEN/);
   assert.match(sessionFor("2027-04-13").detail, /Complete each movement/);
   for (const d of ["2027-04-14", "2027-04-15", "2027-04-16"])
     assert.equal(sessionFor(d).kind, "recovery");
@@ -182,4 +182,41 @@ test("short runs cannot be counted as a completed 5K or 10K", () => {
   assert.equal(goalResults([{ ...run, miles: 5 }]).five, undefined);
   assert.ok(goalResults([{ ...run, minutes: 45, miles: 6.214 }]).ten);
   assert.equal(goalResults([{ ...run, minutes: 44, miles: 6.18 }]).ten, undefined);
+});
+
+
+test("hybrid week redistributes miles across five runs and three strength exposures", () => {
+ const week = Array.from({length:7},(_,i)=>sessionFor(addDays("2026-11-02",i)));
+ assert.deepEqual(week.map(s=>s.miles),[3,4,0,4,3,0,8]);
+ assert.match(week[0].title,/strength/); assert.match(week[4].title,/strength/);
+ assert.equal(week[2].kind,"strength"); assert.match(week[3].heartRate,/140/);
+ assert.match(week[3].rpe,/3–4/);
+ assert.ok(week.every(s=>s.goal && s.rpe && s.heartRate));
+ const cutback=sessionFor("2026-11-17");
+ assert.match(cutback.title,/cutback/); assert.match(cutback.rpe,/3–4/);
+});
+
+test("regular weekday sessions fit the 50-minute cap",()=>{for(let date=START;date<CHALLENGE_START;date=addDays(date,1)){const day=new Date(`${date}T12:00:00Z`).getUTCDay();if(day>=1&&day<=5) assert.ok(sessionFor(date).minutes<=50,date);}});
+
+const {mergeGarmin, validActivities} = load("../../training plan/src/garmin.ts");
+const activity = {id:"123",date:"2026-10-28",startTime:"2026-10-28T07:00:00-04:00",type:"RUNNING",name:"Morning run",minutes:30,miles:3,avgHr:140,maxHr:150,device:"Garmin",importedAt:"2026-10-28T12:00:00Z"};
+test("Garmin reimports are idempotent and do not certify completion or RX",()=>{
+  const first=mergeGarmin([], [activity], [], DEFAULT_SETTINGS);
+  const again=mergeGarmin(first,[activity],[],DEFAULT_SETTINGS);
+  assert.equal(again.length,1);
+  assert.equal(again[0].status,"modified");
+  assert.equal(again[0].scaled,true);
+  assert.equal(again[0].pullups,0);
+  assert.equal(again[0].vest,0);
+  assert.equal(mergeGarmin(again,[{...activity,minutes:31}],[],DEFAULT_SETTINGS)[0].minutes,31);
+});
+test("Garmin attaches to a unique matching manual record and preserves manual specifics",()=>{
+  const manual={...mergeGarmin([],[activity],[],DEFAULT_SETTINGS)[0],id:"manual",garminIds:[],garmin:[],minutes:50,pullups:8,updatedAt:"2026-10-28T13:00:00Z"};
+  const result=mergeGarmin([manual],[activity],[],DEFAULT_SETTINGS);
+  assert.equal(result.length,1);
+  assert.equal(result[0].minutes,50);
+  assert.equal(result[0].pullups,8);
+  assert.deepEqual(result[0].garminIds,["123"]);
+  assert.equal(mergeGarmin([manual,{...manual,id:"second"}],[activity],[],DEFAULT_SETTINGS).length,3);
+  assert.equal(validActivities([{...activity,avgHr:999}]),false);
 });

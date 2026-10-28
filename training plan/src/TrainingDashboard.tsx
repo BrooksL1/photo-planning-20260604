@@ -31,6 +31,9 @@ import {
   type Workout,
 } from "./plan";
 import styles from "./training.module.css";
+import { mergeGarmin, validActivities } from "./garmin";
+
+function sMiles(s: Session) { return s.miles ? ` · ${s.miles} planned miles` : ""; }
 
 const STORAGE_KEY = "brooksl.training.v1";
 type Data = {
@@ -104,14 +107,26 @@ function blankLog(s: Session): Workout {
 export default function TrainingDashboard() {
   const [data, setData] = useState<Data>(emptyData);
   const [ready, setReady] = useState(false);
+  const [cloud, setCloud] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("Public workout history. Open your personal editing link to publish logs and corrections.");
+  const [syncBusy, setSyncBusy] = useState(false);
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const cloudRef = useRef(false);
+  const etagRef = useRef<string | null>(null);
+  const saveQueue = useRef(Promise.resolve());
+  const refreshing = useRef(false);
   const [notice, setNotice] = useState("");
   const [today, setToday] = useState(START);
   const [week, setWeek] = useState(monday(START));
   const [tab, setTab] = useState<"week" | "roadmap" | "journal" | "settings">(
     "week",
   );
+  const [detailOnly, setDetailOnly] = useState(false);
+  const [month, setMonth] = useState(START.slice(0, 7) + "-01");
   const [selected, setSelected] = useState<Session | null>(null);
   const [editing, setEditing] = useState<Workout | null>(null);
+  const [timeText, setTimeText] = useState("");
   const [tripDraft, setTripDraft] = useState({
     title: "",
     start: "",
@@ -125,6 +140,7 @@ export default function TrainingDashboard() {
   useEffect(() => {
     const now = localDate();
     setToday(now);
+    setMonth((now < START ? START : now >= BIRTHDAY ? "2027-05-01" : now).slice(0, 7) + "-01");
     setWeek(monday(now < START ? START : now >= BIRTHDAY ? "2027-05-04" : now));
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -143,7 +159,73 @@ export default function TrainingDashboard() {
     }
     setReady(true);
   }, []);
+  function saveCloud(next: Data) {
+    if (!cloudRef.current) return;
+    saveQueue.current = saveQueue.current.then(async () => {
+      if (!cloudRef.current) return;
+      const response = await fetch("/api/training/journal", {method:"PUT", headers:{"Content-Type":"application/json"},body:JSON.stringify({value:next,etag:etagRef.current})});
+      if (!response.ok) throw new Error("Cloud save could not complete. Your local copy is kept; refresh private data before trying again.");
+      etagRef.current=(await response.json()).etag;
+      setSyncMessage("Workout records saved. Stats are public; notes and travel remain private.");
+    }).catch((error: unknown)=>{cloudRef.current=false;setCloud(false);setSyncMessage(error instanceof Error?error.message:"Cloud save unavailable; local copy kept.");});
+  }
+  async function refreshCloud() {
+    if (refreshing.current) return;
+    refreshing.current=true;
+    setSyncBusy(true);
+    try {
+      await saveQueue.current;
+      const auth=await fetch("/api/training/session",{cache:"no-store"});
+      if(!auth.ok) throw new Error("Could not check editing access.");
+      if(!(await auth.json()).authenticated) {
+        const r=await fetch("/api/training/history",{cache:"no-store"});
+        if(!r.ok) throw new Error("Public history is temporarily unavailable. Local entries are kept.");
+        const history=await r.json();
+        if(!validateLogs(history.logs)) throw new Error("Public history could not be read.");
+        const local=dataRef.current;
+        const logs=[...new Map([...history.logs,...local.logs].map((l:Workout)=>[l.id,l])).values()];
+        const next={...local,logs};dataRef.current=next;setData(next);
+        setSyncMessage(`Public history${history.syncedAt ? ` · Garmin imported ${new Date(history.syncedAt).toLocaleString()}` : ""}. Open your personal editing link to publish changes. Local logs stay on this device until unlocked.`);return;
+      }
+      const [journal,garmin]=await Promise.all([fetch("/api/training/journal",{cache:"no-store"}),fetch("/api/training/garmin",{cache:"no-store"})]);
+      if(!journal.ok || !garmin.ok) throw new Error("Private imports are temporarily unavailable. Your local journal is unchanged.");
+      const remote=await journal.json(), imported=await garmin.json();
+      if(remote.value && !isData(remote.value)) throw new Error("The private journal needs review. Local entries were kept.");
+      if(!validActivities(imported.activities)) throw new Error("Garmin import data could not be read.");
+      const local=dataRef.current;
+      const merged = new Map<string,Workout>();
+      for(const l of [...local.logs,...(remote.value?.logs??[])]) {
+        const previous=merged.get(l.id);
+        if(!previous || (l.updatedAt??"") >= (previous.updatedAt??"")) merged.set(l.id,l);
+      }
+      const base: Data=remote.value ? {...remote.value,logs:[...merged.values()]} : local;
+      const next={...base,logs:mergeGarmin(base.logs,imported.activities,base.trips,base.settings)};
+      etagRef.current=remote.etag;cloudRef.current=true;setCloud(true);
+      dataRef.current=next;setData(next);
+      try {localStorage.setItem(STORAGE_KEY,JSON.stringify(next));}catch { /* Cloud remains available. */ }
+      saveCloud(next);
+      setSyncMessage(imported.syncedAt ? `Garmin last imported ${new Date(imported.syncedAt).toLocaleString()}. Imported sessions need completion review.` : "Editing unlocked. Waiting for the first Garmin import.");
+    } catch(error) {setSyncMessage(error instanceof Error?error.message:"Sync unavailable.");}
+    finally {refreshing.current=false;setSyncBusy(false);}
+  }
+  useEffect(()=>{
+    if(!ready) return;
+    void (async()=>{
+      const hash=new URLSearchParams(window.location.hash.slice(1));
+      const key=hash.get("access");
+      if(key) {
+        history.replaceState(null,"",window.location.pathname+window.location.search);
+        const r=await fetch("/api/training/session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key})});
+        if(!r.ok) {setSyncMessage("That personal access link could not unlock this device.");return;}
+      }
+      await refreshCloud();
+    })().catch(()=>setSyncMessage("Private sync unavailable; local logging still works."));
+    // Run after local restore, once per page load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[ready]);
   function persist(next: Data) {
+    dataRef.current=next;
+    saveCloud(next);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       setData(next);
@@ -161,6 +243,8 @@ export default function TrainingDashboard() {
     } else dialogRef.current?.close();
   }, [selected]);
   function openLog(s: Session, existing?: Workout) {
+    setTimeText(existing?.minutes ? secondsLabel(existing.minutes) : "");
+    setDetailOnly(false);
     setEditing(
       existing ?? { ...blankLog(s), partition: data.settings.partition },
     );
@@ -169,7 +253,7 @@ export default function TrainingDashboard() {
   function saveLog(e: FormEvent) {
     e.preventDefault();
     if (!editing) return;
-    const log = { ...editing, id: editing.id || crypto.randomUUID() };
+    const log = { ...editing, id: editing.id || crypto.randomUUID(), updatedAt: new Date().toISOString() };
     persist({
       ...data,
       logs: [...data.logs.filter((l) => l.id !== log.id), log],
@@ -237,12 +321,18 @@ export default function TrainingDashboard() {
   const focusDate =
     today < START ? START : today >= BIRTHDAY ? "2027-05-10" : today;
   const session = sessionFor(focusDate, data.trips, data.settings);
-  const sessions = Array.from({ length: 7 }, (_, i) =>
-    sessionFor(addDays(week, i), data.trips, data.settings),
-  );
+  const calendarStart = monday(month);
+  const calendarSessions = Array.from({ length: 42 }, (_, i) => sessionFor(addDays(calendarStart, i), data.trips, data.settings));
+  const sessions = calendarSessions.filter(s => s.date.slice(0, 7) === month.slice(0, 7));
+  function moveMonth(delta: number) {
+    const d = new Date(`${month}T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + delta);
+    setMonth(d.toISOString().slice(0, 10));
+  }
+  function openDetails(s: Session) { setEditing(null); setDetailOnly(true); setSelected(s); }
+
   const weekLogs = data.logs.filter(
     (l) =>
-      l.date >= week && l.date <= addDays(week, 6) && l.status !== "skipped",
+      l.date.slice(0, 7) === month.slice(0, 7) && l.status !== "skipped",
   );
   const totalMiles = weekLogs.reduce((n, l) => n + l.miles, 0);
   const plannedMiles = sessions.reduce((n, s) => n + s.miles, 0);
@@ -410,7 +500,7 @@ export default function TrainingDashboard() {
           <nav aria-label="Training views" className={styles.tabs}>
             {(
               [
-                ["week", "This week"],
+                ["week", "Calendar"],
                 ["roadmap", "The plan"],
                 ["journal", "Workout log"],
                 ["settings", "Travel & settings"],
@@ -427,15 +517,20 @@ export default function TrainingDashboard() {
             ))}
           </nav>
           <span className={styles.localBadge}>
-            <span /> Saved on this device
+            <span /> {cloud ? "Editing unlocked" : "Saved on this device"}
           </span>
         </div>
         <p className={styles.notice} role="status" aria-live="polite">
           {notice ||
             (!ready
               ? "Opening your journal…"
-              : "Your workout log is private to this browser. Export a backup to keep a copy.")}
+              : "Workout history is public. Publishing edits requires your personal editing link.")}
         </p>
+        <section className={styles.syncBar} aria-label="Garmin and workout history">
+          <div><strong>Garmin + workout history</strong><p role="status">{syncMessage}</p></div>
+          <button type="button" onClick={()=>void refreshCloud()} disabled={syncBusy}>{syncBusy ? "Refreshing…" : "Refresh history"}</button>
+          {cloud && <button type="button" onClick={async()=>{await saveQueue.current;await fetch("/api/training/session",{method:"DELETE"});cloudRef.current=false;setCloud(false);setSyncMessage("Editing locked. Public history remains visible; your local copy stays on this device.");}}>Lock editing</button>}
+        </section>
         {!data.calendarReviewed && ready && (
           <div className={styles.importNotice}>
             <div>
@@ -507,26 +602,26 @@ export default function TrainingDashboard() {
             <section className={styles.weekSection}>
               <div className={styles.sectionHeading}>
                 <div>
-                  <p className={styles.eyebrow}>YOUR WEEK AT A GLANCE</p>
+                  <p className={styles.eyebrow}>YOUR TRAINING CALENDAR</p>
                   <h2>
-                    {displayDate(week)} — {displayDate(addDays(week, 6))}
+                    {displayDate(month, { month: "long", year: "numeric" })}
                   </h2>
                 </div>
                 <div className={styles.weekNav}>
                   <button
-                    aria-label="Previous week"
-                    disabled={week <= monday(START)}
-                    onClick={() => setWeek(addDays(week, -7))}
+                    aria-label="Previous month"
+                    disabled={month <= START.slice(0, 7) + "-01"}
+                    onClick={() => moveMonth(-1)}
                   >
                     ←
                   </button>
-                  <button onClick={() => setWeek(monday(focusDate))}>
+                  <button onClick={() => setMonth(focusDate.slice(0, 7) + "-01")}>
                     Today
                   </button>
                   <button
-                    aria-label="Next week"
-                    disabled={week >= lastWeek}
-                    onClick={() => setWeek(addDays(week, 7))}
+                    aria-label="Next month"
+                    disabled={month >= "2027-05-01"}
+                    onClick={() => moveMonth(1)}
                   >
                     →
                   </button>
@@ -544,61 +639,25 @@ export default function TrainingDashboard() {
                 </span>
                 <span>Saturday · full rest</span>
               </div>
-              <div className={styles.days}>
-                {sessions.map((s) => {
-                  const logs = data.logs.filter((l) => l.date === s.date);
-                  return (
-                    <article
-                      key={s.date}
-                      className={`${styles.day} ${s.date === today ? styles.currentDay : ""}`}
-                    >
-                      <div className={styles.dayDate}>
-                        <span>{displayDate(s.date, { weekday: "short" })}</span>
-                        <strong>
-                          {displayDate(s.date, { day: "numeric" })}
-                        </strong>
-                      </div>
-                      <div className={styles.dayBody}>
-                        <span
-                          className={`${styles.type} ${s.attempt ? styles.attemptType : ""}`}
-                        >
-                          {s.tag}
-                        </span>
-                        <h3>{s.title}</h3>
-                        <p>
-                          {s.kind === "rest"
-                            ? "No alarm. No catch-up workout."
-                            : `${data.settings.morning} · ${s.miles ? `${s.miles.toFixed(1)} mi · ` : ""}${s.minutes} min${s.trip ? ` · ${s.trip.title}` : ""}`}
-                        </p>
-                        <details>
-                          <summary>Session details</summary>
-                          <p>{s.detail}</p>
-                        </details>
-                        {logs.map((l) => (
-                          <button
-                            className={styles.loggedButton}
-                            onClick={() => openLog(s, l)}
-                            key={l.id}
-                          >
-                            {l.status === "skipped" ? "— Skipped" : "✓ Logged"}{" "}
-                            · {l.title} · edit
-                          </button>
-                        ))}
-                      </div>
-                      {s.kind !== "rest" && (
-                        <button
-                          className={styles.dayLog}
-                          aria-label={`Log workout ${s.date}`}
-                          disabled={!ready}
-                          onClick={() => openLog(s)}
-                        >
-                          ＋
-                        </button>
-                      )}
-                    </article>
-                  );
-                })}
+              <div className={styles.calendarScroll}>
+                <div className={styles.calendarGrid} aria-label="Monthly workout calendar">
+                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(day => <div className={styles.weekday} key={day}>{day}</div>)}
+                  {calendarSessions.map(s => {
+                    const logs = data.logs.filter(l => l.date === s.date);
+                    const outside = s.date.slice(0, 7) !== month.slice(0, 7);
+                    return <button key={s.date} type="button" onClick={() => openDetails(s)}
+                      className={`${styles.calendarCell} ${outside ? styles.outsideMonth : ""} ${s.date === today ? styles.calendarToday : ""}`}
+                      aria-label={`${displayDate(s.date, {weekday:"long", month:"long",day:"numeric"})}: ${s.title}`}>
+                      <span className={styles.cellDate}>{displayDate(s.date, {day:"numeric"})}{s.date === today && <small>Today</small>}</span>
+                      <span className={`${styles.cellType} ${s.attempt ? styles.cellAttempt : ""}`}>{s.attempt ? "Attempt" : s.trip ? "Travel" : s.kind}</span>
+                      <strong>{s.title}</strong>
+                      {s.minutes > 0 && <span>{s.miles > 0 ? `${s.miles} mi · ` : ""}~{s.minutes} min</span>}
+                      {logs.length > 0 && <span className={styles.cellLogged}>{logs.some(l=>l.status !== "skipped") ? "✓ Logged" : "Skipped"}</span>}
+                    </button>;
+                  })}
+                </div>
               </div>
+              <p className={styles.formHelp}>Select a day for the purpose, steps, effort targets, and workout log. Swipe horizontally on small screens.</p>
             </section>
           </>
         )}
@@ -638,7 +697,7 @@ export default function TrainingDashboard() {
                     </div>
                     <button
                       onClick={() => {
-                        setWeek(monday(p.start));
+                        setWeek(monday(p.start)); setMonth(p.start.slice(0, 7) + "-01");
                         setTab("week");
                       }}
                     >
@@ -656,7 +715,7 @@ export default function TrainingDashboard() {
                 <button
                   key={a.date}
                   onClick={() => {
-                    setWeek(monday(a.date));
+                    setWeek(monday(a.date)); setMonth(a.date.slice(0, 7) + "-01");
                     setTab("week");
                   }}
                 >
@@ -1081,8 +1140,8 @@ export default function TrainingDashboard() {
             </article>
             <div className={styles.backupBar}>
               <p>
-                Workout data and travel dates are kept on this device, separate
-                from the public plan.
+                Workout statistics are public when published. Notes and travel dates
+                stay private; backups include them.
               </p>
               <button
                 onClick={() => download(data, `road-to-45-${localDate()}.json`)}
@@ -1106,7 +1165,19 @@ export default function TrainingDashboard() {
         onCancel={() => setSelected(null)}
         onClose={() => setSelected(null)}
       >
-        {editing && (
+        {selected && detailOnly && <div>
+          <div className={styles.dialogHeader}><div><p className={styles.eyebrow}>{displayDate(selected.date, {weekday:"long", month:"long",day:"numeric"})}</p><h2>{selected.title}</h2></div><button type="button" aria-label="Close workout details" onClick={()=>setSelected(null)}>✕</button></div>
+          <div className={styles.workoutDetails}>
+            <dl><dt>Start / time</dt><dd>{data.settings.morning} · approximately {selected.minutes} minutes{sMiles(selected)}</dd>
+            <dt>Goal</dt><dd>{selected.goal}</dd><dt>Effort / RPE</dt><dd>{selected.rpe}</dd><dt>Heart rate</dt><dd>{selected.heartRate}</dd></dl>
+            <h3>What to do</h3><p>{selected.detail}</p>
+            <h3>Your record</h3>
+            {data.logs.filter(l=>l.date===selected.date).map(l=><button type="button" key={l.id} className={styles.loggedButton} onClick={()=>openLog(selected,l)}>{l.title} · {l.minutes ? secondsLabel(l.minutes) : "No time"} · {l.miles.toFixed(2)} mi · {l.rpe ? `RPE ${l.rpe}` : "RPE not logged"} · Edit</button>)}
+            {!data.logs.some(l=>l.date===selected.date) && <p>No workout logged yet.</p>}
+          </div>
+          <div className={styles.dialogFooter}><span>Log what you actually did.</span><button type="button" className={styles.primaryButton} onClick={()=>openLog(selected)}>Log this workout ＋</button></div>
+        </div>}
+        {editing && !detailOnly && (
           <form onSubmit={saveLog}>
             <div className={styles.dialogHeader}>
               <div>
@@ -1121,6 +1192,12 @@ export default function TrainingDashboard() {
                 ✕
               </button>
             </div>
+            {selected && <div className={styles.logPlan}><strong>Planned: {selected.title}</strong><p>{selected.rpe} · {selected.heartRate}</p></div>}
+            {!!editing.garmin?.length && <div className={styles.logPlan}>
+              <strong>Data from Garmin · review before marking completed</strong>
+              {editing.garmin.map(a=><p key={a.id}>{a.name} ({a.device}) · {secondsLabel(a.minutes)} · {a.miles.toFixed(2)} mi{a.avgHr ? ` · ${a.avgHr} bpm avg` : ""}{a.maxHr ? ` · ${a.maxHr} bpm max` : ""}<br/>Matched to {displayDate(a.date)}. Reps, vest, and completion are yours to confirm.</p>)}
+              <small>Insights derived in part from Garmin device-sourced data.</small>
+            </div>}
             <div className={styles.formGrid}>
               <label className={styles.fullWidth}>
                 Workout
@@ -1207,10 +1284,18 @@ export default function TrainingDashboard() {
                   }
                 />
               </label>
+              <label>Time · minutes:seconds
+                <input type="text" inputMode="text" placeholder="30:00" pattern="[0-9]{1,4}:[0-5][0-9]" value={timeText}
+                  onChange={e=>{const value=e.target.value;setTimeText(value);if(!value)setEditing({...editing,minutes:0});else if(/^\d{1,4}:[0-5]\d$/.test(value)){const [m,s]=value.split(":").map(Number);setEditing({...editing,minutes:m+s/60});}}} />
+              </label>
               {(
                 [
-                  ["minutes", "Time · minutes (decimals OK)", "0.01"],
+
                   ["miles", "Distance · miles", "0.001"],
+                  ["avgHr", "Average heart rate · bpm", "1"],
+                  ["maxHr", "Maximum heart rate · bpm", "1"],
+                  ["runMinutes", "Running time · minutes", "0.01"],
+                  ["strengthMinutes", "Strength time · minutes", "0.01"],
                   ["pullups", "Total pull-ups", "1"],
                   ["pushups", "Total push-ups", "1"],
                   ["squats", "Total air squats", "1"],
@@ -1224,7 +1309,7 @@ export default function TrainingDashboard() {
                   <input
                     type="number"
                     min="0"
-                    max={key === "minutes" ? 1440 : 10000}
+                    max={key.endsWith("Hr") ? 250 : key.toLowerCase().includes("minutes") ? 1440 : 10000}
                     step={step}
                     value={editing[key] || ""}
                     onChange={(e) =>
@@ -1236,7 +1321,7 @@ export default function TrainingDashboard() {
               <p className={`${styles.formHelp} ${styles.fullWidth}`}>
                 Record actual work, not planned work. For a timed 5K/10K,
                 exclude warm-up and cooldown (5K = 3.107 mi; 10K = 6.214 mi).
-                Enter 21:45 as 21.75 minutes. For Murph, record full distance,
+                Enter a race time directly, such as 21:45. For Murph, record full distance,
                 reps, vest load, format, and any scaling.
               </p>
               <label className={`${styles.checkbox} ${styles.fullWidth}`}>
@@ -1250,7 +1335,7 @@ export default function TrainingDashboard() {
                 Used assistance, shortened reps, or otherwise scaled Murph
               </label>
               <label className={styles.fullWidth}>
-                Notes · sets, format, recovery
+                Private notes · sets, format, recovery
                 <textarea
                   rows={3}
                   maxLength={4000}
@@ -1263,7 +1348,7 @@ export default function TrainingDashboard() {
               </label>
             </div>
             <div className={styles.dialogFooter}>
-              <span>Private to this browser · export to back up</span>
+              <span>{cloud ? "Editing unlocked + local backup" : "Local only until editing is unlocked"}</span>
               <button className={styles.primaryButton} type="submit">
                 Save workout ✓
               </button>

@@ -30,6 +30,18 @@ export type Workout = {
   scaled: boolean;
   notes: string;
   partition: "partitioned" | "unpartitioned";
+  updatedAt?: string;
+  avgHr?: number;
+  maxHr?: number;
+  runMinutes?: number;
+  strengthMinutes?: number;
+  garminIds?: string[];
+  garmin?: GarminActivity[];
+};
+export type GarminActivity = {
+  id: string; date: string; startTime: string; type: string; name: string;
+  minutes: number; miles: number; avgHr?: number; maxHr?: number;
+  device: string; rpe?: number; importedAt: string;
 };
 export type Settings = {
   morning: string;
@@ -53,6 +65,9 @@ export type Session = {
   tag: string;
   trip?: Trip;
   attempt?: "5K" | "10K" | "Murph";
+  goal?: string;
+  heartRate?: string;
+  rpe?: string;
 };
 export type Phase = {
   title: string;
@@ -67,7 +82,7 @@ export const PHASES: Phase[] = [
     start: START,
     end: "2026-11-22",
     focus:
-      "Hold roughly 25 miles/week. Learn repeatable, submaximal strength work. One easy run gets short strides; no new hard running block yet.",
+      "Redistribute to roughly 22 miles/week to fit 50-minute weekdays. Learn repeatable, submaximal strength work. Five runs, with one controlled quality session; three calisthenics exposures of different sizes. Easy effort is anchored near 140 bpm and RPE 3–4.",
     checkpoint:
       "Consistent pain-free mornings; 6 × 2–3 strict pull-ups with clean reps and 2 reps in reserve.",
   },
@@ -76,9 +91,9 @@ export const PHASES: Phase[] = [
     start: "2026-11-23",
     end: "2027-01-03",
     focus:
-      "One controlled quality run each week, alternating tempo and short intervals. Build bodyweight circuit volume gradually. Holiday travel becomes maintenance.",
+      "One controlled quality run each week, alternating tempo and short intervals. Build repeatable nonfailure strength and sequential movement blocks gradually. Holiday travel becomes maintenance.",
     checkpoint:
-      "A controlled 20-minute tempo and 6–8 rounds of 3 pull-ups / 6 push-ups / 9 squats, with no lingering soreness.",
+      "A controlled 20-minute tempo and 18–24 pull-ups, then 36–48 push-ups, then 54–72 squats, with no lingering soreness.",
   },
   {
     title: "Strength into endurance",
@@ -94,7 +109,7 @@ export const PHASES: Phase[] = [
     start: "2027-02-15",
     end: "2027-03-21",
     focus:
-      "Progress partial unpartitioned rehearsals only as recovery allows, toward 50–80 pull-ups, 100–160 push-ups, and 150–240 squats. Introduce goal-pace segments after a successful checkpoint. Keep most running conversational.",
+      "Progress partial unpartitioned rehearsals only as recovery allows, toward recoverable partial-volume blocks within the 50-minute morning limit. Introduce goal-pace segments after a successful checkpoint. Keep most running conversational.",
     checkpoint:
       "For 5K: 3 × 1 km near 7:00/mile, 2 min jog. For 10K: 3 × 2 km near 7:15/mile, 2 min jog. These are readiness clues, not guarantees.",
   },
@@ -156,21 +171,18 @@ export const ATTEMPTS = Array.from({ length: 6 }, (_, i) => ({
   goal: (["5K", "10K", "Murph"] as const)[i % 3],
 }));
 
-const mileage = [
-  25, 25, 26, 21, 26, 27, 27, 22, 24, 20, 20, 24, 18, 25, 22, 26, 18, 23, 25,
-  26, 22, 18, 10,
-];
-export function sessionFor(
+function buildSession(
   date: string,
   trips: Trip[] = [],
   settings: Settings = DEFAULT_SETTINGS,
 ): Session {
   const index = Math.max(0, Math.floor(dayDiff(date, "2026-10-26") / 7));
   const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
-  const target = mileage[Math.min(index, mileage.length - 1)];
-  const long = Math.min(10, Math.round(target * 0.4));
-  const short = Math.round(((target - long) / 3) * 10) / 10;
-  const deload = [3, 7, 11, 15, 19].includes(index);
+  const deload = index % 4 === 3;
+  const target = (index < 8 ? 22 : 23) * (deload ? .8 : 1);
+  const distance = (share: number) => Math.round(target * share / 22 * 10) / 10;
+  const long = distance(8);
+  const short = distance(4);
   const base = {
     date,
     miles: 0,
@@ -204,83 +216,48 @@ export function sessionFor(
       ...base,
       kind: "run",
       miles: long,
-      minutes: long * 10,
+      minutes: Math.ceil(long * 11),
       title: "Sunday long run",
-      detail: `${long} miles at conversational effort (RPE 3–4/10). Keep the familiar 10-mile distance only when recovered. Fuel and drink for longer outings. No fast finish.`,
+      detail: `${long} miles at conversational effort (RPE 3–4/10). Use roughly 140 bpm and RPE 3–4 as your easy anchor. Slow or walk hills; 155 bpm at your reported RPE 6 is too hard for this session. Fuel and drink for longer outings. No fast finish. Sunday is the longer-session exception to the weekday 50-minute cap.`,
     };
-  else if (dow === 1)
+  else if (dow === 1 || dow === 5) {
+    const miles = distance(3);
+    const sets = deload ? 3 : 4;
     s = {
-      ...base,
-      kind: "strength",
-      title: "Strength · quality before quantity",
-      detail: `Warm up 5–8 min. ${deload ? "4" : "6"} sets of ${index < 5 ? "2" : "2–4"} strict pull-ups, resting 90–120 sec. Keep 2 reps in reserve; use assistance when needed. Then 3 × 6–10 controlled push-ups, 3 × 8 split squats/side, 3 × 10 bodyweight hip hinges, and 2 × 30 sec side planks. Add reps only after two comfortable sessions.`,
+      ...base, kind: "run", miles, minutes: 50,
+      title: "Easy run + controlled strength",
+      detail: `30 min easy running (roughly ${miles} miles, not a mileage requirement) at RPE 3–4, using roughly 140 bpm as an anchor. Slow or walk hills before effort rises toward 6/10 at 155 bpm. Then 3 min shoulder preparation and up to 15 min of upper-body practice: warm shoulders, ${sets} sets of 2 clean unvested strict pull-ups with 2–3 min rests, then 2 small push-up sets with 2–3 clean reps left in reserve. Use singles or fewer sets if quality fades. Do not race the clock or add rounds to fill time. ${dow === 1 ? "Keep this especially light after Sunday; no high-volume squats." : "Finish with gentle calf/hip mobility. Protect Sunday recovery."} These reps are part of the weekly strength dose, not extras on top.`,
     };
-  else if (dow === 2) {
-    const early = index < 4;
+  } else if (dow === 2) {
+    const early = index < 2;
     const tempo = index % 2 === 0;
-    const quality = early
-      ? "Easy run + strides"
-      : tempo
-        ? "Controlled tempo"
-        : "Intervals · controlled, repeatable";
     const work = early
-      ? "Run easy. Finish with 4 × 15 sec relaxed strides, walking 60–90 sec between. Strides are smooth, never sprints."
+      ? "After 10–15 min easy, run 4 × 2 min at controlled RPE 6 with 2 min easy jog between. Cool down at least 10 min."
       : tempo
-        ? `Within the total distance, warm up 10–15 min, then ${index < 10 ? "2 × 8" : index < 17 ? "3 × 7" : "2 × 12"} min at RPE 6–7/10 with 3 min easy jog; cool down at least 10 min.`
-        : `Within the total distance, warm up 10–15 min, then ${index < 10 ? "5 × 2" : "5 × 3"} min at current 5K effort, with 2 min easy jog; cool down at least 10 min. Reps should be even, with one left in reserve.`;
+        ? `Warm up 10–15 min. Run ${index < 10 ? "3 × 5" : "3 × 7"} min at RPE 6–7, with 2–3 min easy jogging. Cool down at least 10 min.`
+        : `Warm up 10–15 min. Run ${index < 10 ? "4 × 3" : "5 × 3"} min near current 5K effort, RPE 7–8, with 2 min easy jogging. Cool down at least 10 min.`;
     s = {
-      ...base,
-      kind: "run",
-      title: deload ? "Easy run · cutback" : quality,
-      miles: short,
-      minutes: Math.round(short * 10),
-      detail: deload
-        ? `${short} miles easy. Skip speed work this week.`
-        : `${short} miles total, including warm-up and cooldown. ${work} Start from current fitness (25:00 5K), not goal pace. ${index >= 17 ? "After a successful checkpoint, replace the quality block with 3 × 1 km at 7:00/mile OR 2 × 2 km at 7:15/mile, with 2 min easy jog; do not add both or add these to the original work." : ""}`,
+      ...base, kind: "run", miles: short, minutes: 50,
+      title: deload ? "Easy run · cutback" : tempo ? "Controlled tempo" : "Controlled intervals",
+      detail: deload ? `${short} easy miles, RPE 3–4 near 140 bpm. Skip quality work this week.` : `50 min maximum, roughly ${short} miles including all warm-up, recoveries, and cooldown. ${work} Shorten the work block if needed to fit your available time; never cut the warm-up to chase mileage. Your reported anchors: 155 bpm ≈ RPE 6, 165 ≈ 7, 175 ≈ 8. Heart rate lags on short reps: use effort, not a target to chase. Current 25:00 5K pace is about 8:03/mile; 7:00 and 7:15/mile are future race goals. Finish repeatable, with one rep in reserve.`,
     };
-  } else if (dow === 3 || dow === 5)
+  } else if (dow === 4) {
     s = {
-      ...base,
-      kind: "run",
-      title: dow === 3 ? "Easy aerobic miles" : "Easy run · absorb the work",
-      miles: short,
-      minutes: Math.round(short * 10),
-      detail: `${short} miles at RPE 3–4/10, able to speak full sentences. A rough starting range is 9:30–11:00/mile, but effort wins over pace. Finish with 5 min calf and hip mobility.`,
+      ...base, kind: "run", miles: short, minutes: 50,
+      title: "Easy aerobic run",
+      detail: `Up to 45 min conversational running (roughly ${short} miles), then 5 min mobility. RPE 3–4. Use roughly 140 bpm as a working anchor; mid-140s prompts a breathing check, not a hard physiological cutoff. Slow down or walk hills if effort rises. No second quality session yet: this morning absorbs Wednesday's strength work. Finish with 5 min gentle mobility.`,
     };
-  else {
-    const rounds = deload
-      ? 4
-      : index < 4
-        ? 4
-        : index < 10
-          ? 6
-          : index < 16
-            ? 8
-            : index < 19
-              ? 10
-              : index < 21
-                ? 12
-                : 16;
-    const reps =
-      index < 10
-        ? "3 pull-ups / 6 push-ups / 9 air squats"
-        : "up to 5 pull-ups / 10 push-ups / 15 air squats";
-    const per = index < 10 ? 3 : 5;
-    const block =
-      settings.partition === "unpartitioned"
-        ? `Up to ${rounds * per} pull-ups, THEN ${rounds * per * 2} push-ups, THEN ${rounds * per * 3} squats. Finish each movement before starting the next. Use sets of 2–3 pull-ups and 5–10 push-ups, resting 30–90 sec. `
-        : `Up to ${rounds} rounds of ${reps}, resting 60–90 sec. `;
+  } else {
+    const pulls = deload ? 12 : index < 4 ? 16 : index < 10 ? 24 : index < 16 ? 36 : index < 19 ? 48 : 60;
     s = {
-      ...base,
-      kind: "strength",
-      title: "Murph practice · leave some in reserve",
-      minutes: index >= 17 ? 60 : 45,
-      detail: `Warm up 8 min. ${block}Scale push-ups before form fails. Stop at ${index >= 17 ? 45 : 30} min of work, even if the planned reps are unfinished. ${settings.partition === "unpartitioned" ? "In the specific phase, add a half-mile easy run before and after only if the blocks are comfortable. Do not add run distance and vest load together." : "Practice consistent transitions, without racing the clock."} ${settings.vestReady && index >= 10 ? "Only after 50/100/150 comfortable bodyweight reps and normal recovery: try 5–10 lb for a few small sets. Build load or reps in a session, never both. Full 20 lb only after repeated pain-free lighter sessions." : "Bodyweight only. A vest stays out until the readiness check is satisfied."} If sore for more than 48 hours, repeat or reduce the last comfortable dose.`,
+      ...base, kind: "strength", minutes: 50,
+      title: "Murph focus · strength and repeatability",
+      detail: `Warm up shoulders, hips, and ankles for 5–8 min. Up to ${pulls} pull-ups, THEN ${pulls * 2} push-ups, THEN ${pulls * 3} air squats. Start with pull-up singles/doubles, small push-up sets with 2–3 reps in reserve, and squat sets of 10–15. Rest 60–120 sec as needed; finish each movement before the next. Cap the work at ${index < 16 ? 30 : 40} min, even if unfinished. These are ceilings, not mandatory jumps: repeat the last comfortable dose until you recover normally. ${settings.vestReady && index >= 10 ? "If readiness has been confirmed, use only a few small vested sets. Progress load, reps, or shorter rests one at a time, never together. Do not assume a fixed 20 lb vest is appropriate for every movement." : "Bodyweight only until repeatable unweighted work and normal recovery are established. No kipping is assumed."} Keep Monday/Friday practice small; reduce the weekly total if soreness affects the next session.`,
     };
   }
   if (date >= "2027-03-22" && date < CHALLENGE_START && s.kind !== "rest") {
     s =
-      dow === 1 || dow === 4
+      dow === 1 || dow === 3
         ? {
             ...base,
             kind: "recovery",
@@ -323,8 +300,8 @@ export function sessionFor(
         tag: "Challenge morning",
         detail:
           attempt.goal === "Murph"
-            ? `Target 57:00. 1 mile + 100 pull-ups / 200 push-ups / 300 air squats + 1 mile, with a 20 lb vest. ${settings.partition === "partitioned" ? "Partition as 20 rounds of 5/10/15; smaller sets are fine." : "Complete each movement before beginning the next."} Attempt RX only after repeated vested practice and normal recovery. Otherwise do a scaled rehearsal. Practice budget: 9 min first mile + 12 min pull-ups + 12 min push-ups + 12 min squats + 10 min final mile + 2 min transitions = 57 min. These are targets, not a reason to rush unsafe reps.`
-            : `Target ${attempt.goal === "5K" ? "7:00/mile, about 21:45 total" : "45:00 (7:15/mile)"}. Warm up 10–15 min, drills and 4 relaxed strides. Run a measured route, start controlled, then cool down 10 min. The logged miles and time should cover the timed effort only. If the checkpoint is not comfortable, make this a controlled run.`,
+            ? `This challenge requires a longer morning (about 75 min including preparation); it cannot fit a 50-minute cap. Target 57:00. 1 mile + 100 pull-ups / 200 push-ups / 300 air squats + 1 mile, with a 20 lb vest. ${settings.partition === "partitioned" ? "Partition as 20 rounds of 5/10/15; smaller sets are fine." : "Complete each movement before beginning the next."} Attempt RX only after repeated vested practice and normal recovery. Otherwise do a scaled rehearsal. Practice budget: 9 min first mile + 12 min pull-ups + 12 min push-ups + 12 min squats + 10 min final mile + 2 min transitions = 57 min. These are targets, not a reason to rush unsafe reps.`
+            : `Target ${attempt.goal === "5K" ? "7:00/mile, about 21:45 total" : "45:00 (7:15/mile); allow about 65 min with warm-up/cooldown, beyond the normal weekday cap"}. Warm up 10–15 min, drills and 4 relaxed strides. Run a measured route, start controlled, then cool down 10 min. The logged miles and time should cover the timed effort only. If the checkpoint is not comfortable, make this a controlled run.`,
       };
     else if (s.kind !== "rest")
       s = recentMurph
@@ -336,7 +313,7 @@ export function sessionFor(
             detail:
               "20–30 min gentle walking and mobility only. Resume running when soreness and easy effort return to normal; no catch-up reps.",
           }
-        : dow === 1 || dow === 4
+        : dow === 1 || dow === 3
           ? {
               ...base,
               kind: "recovery",
@@ -421,6 +398,18 @@ export function sessionFor(
       ? " If fatigue or pain changes your stride, stop and reduce the session."
       : "";
   return s;
+}
+
+export function sessionFor(date: string, trips: Trip[] = [], settings: Settings = DEFAULT_SETTINGS): Session {
+  const s = buildSession(date, trips, settings);
+  const quality = /tempo|interval/i.test(s.title);
+  const combined = s.title.includes("controlled strength");
+  const recovery = s.kind === "recovery" || s.kind === "rest";
+  return { ...s,
+    goal: s.attempt ? `Assess ${s.attempt} progress; attempts replace hard training.` : recovery ? "Restore readiness and absorb training." : quality ? "Improve running fitness through controlled, repeatable work." : s.kind === "strength" ? "Build clean repeated sets for unpartitioned Murph." : combined ? "Build aerobic fitness and pulling/pushing strength without exhausting either." : "Build aerobic endurance while preserving recovery.",
+    rpe: s.attempt ? "8–9 for a ready, deliberate attempt; scale if not ready." : recovery ? "1–2 / 10" : quality ? "Work: 6–8 / 10. Warm-up and recovery: 2–4." : s.kind === "strength" ? "5–6 overall; leave 2–3 clean reps in reserve." : combined ? "Run: 3–4 / 10. Strength: controlled, no failure." : "3–4 / 10; comfortable full sentences.",
+    heartRate: recovery ? "No target; easy breathing." : s.kind === "strength" || s.attempt === "Murph" ? "No HR target for strength. Rep quality and recovery set the dose." : s.attempt ? "No fixed cap; pace and effort guide the attempt, not an HR number to chase." : quality ? "Reported anchors: 155 ≈ RPE 6, 165 ≈ 7, 175 ≈ 8. HR lags; these are not measured zones." : "Around 140 bpm. Check breathing in the mid-140s; slow down well before 155 if effort reaches 6/10. Provisional, not a measured threshold.",
+  };
 }
 
 export function secondsLabel(minutes: number) {
@@ -517,7 +506,8 @@ export function validateLogs(value: unknown): value is Workout[] {
         ].every(
           (k) => typeof l[k] === "number" && Number.isFinite(l[k]) && l[k] >= 0,
         ) &&
-        l.rpe <= 10,
+        l.rpe <= 10 &&
+        ["avgHr", "maxHr", "runMinutes", "strengthMinutes"].every(k => l[k] === undefined || (typeof l[k] === "number" && Number.isFinite(l[k]) && l[k] >= 0 && l[k] <= (k.endsWith("Hr") ? 250 : 1440))),
     )
   );
 }
