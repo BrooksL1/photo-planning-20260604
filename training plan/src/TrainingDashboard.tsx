@@ -11,6 +11,7 @@ import {
 } from "react";
 import {
   ATTEMPTS,
+  FLEX_DATE,
   BIRTHDAY,
   DEFAULT_SETTINGS,
   MILES_5K,
@@ -40,6 +41,7 @@ import { mergeGarmin, validActivities } from "./garmin";
 function compactTitle(s: Session) {
   if (s.attempt) return s.attempt;
   if (s.trip) return "Away";
+  if (s.date === FLEX_DATE) return "Flex";
   if (/tempo/i.test(s.title)) return "Tempo";
   if (/interval/i.test(s.title)) return "Ints";
   if (/threshold/i.test(s.title)) return "Thresh";
@@ -651,6 +653,9 @@ export default function TrainingDashboard() {
               unpartitioned Murph practice. Saturday is rest. Morning durations
               include rests and preparation; the combined mornings exceed 50
               minutes. Reduced weeks and readiness checks govern progression.
+              Full weeks stay at 30–32 miles through March 29, followed by a
+              two-week taper starting March 30. Attempts begin April 13, four
+              weeks before your birthday, with Murph last on May 4.
             </p>
             <div className={styles.phases}>
               {PHASES.map((p, i) => (
@@ -679,10 +684,10 @@ export default function TrainingDashboard() {
               ))}
             </div>
             <h3 className={styles.attemptHeading}>
-              The six challenge mornings
+              Three goal attempts + a flexible week
             </h3>
             <div className={styles.attempts}>
-              {ATTEMPTS.map((a) => (
+              {[...ATTEMPTS, {date:FLEX_DATE,goal:"Recovery / optional running retry"}].sort((a,b)=>a.date.localeCompare(b.date)).map((a) => (
                 <button
                   key={a.date}
                   onClick={() => {
@@ -698,7 +703,7 @@ export default function TrainingDashboard() {
                     })}
                   </span>
                   <strong>{a.goal}</strong>
-                  <small>View the week →</small>
+                  <small>{a.date === FLEX_DATE ? "Easy running is the default →" : "View the week →"}</small>
                 </button>
               ))}
             </div>

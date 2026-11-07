@@ -16,20 +16,17 @@ const {
   validateLogs,
 } = load("../../training plan/src/plan.ts");
 
-test("six attempts start exactly six weeks before the birthday and rotate twice", () => {
-  assert.equal(dayDiff(BIRTHDAY, CHALLENGE_START), 42);
+test("three primary attempts start four weeks before the birthday with Murph last", () => {
+  assert.equal(dayDiff(BIRTHDAY, CHALLENGE_START), 28);
   assert.deepEqual(
     ATTEMPTS.map((a) => a.goal),
-    ["5K", "10K", "Murph", "5K", "10K", "Murph"],
+    ["5K", "10K", "Murph"],
   );
   assert.deepEqual(
     ATTEMPTS.map((a) => a.date),
     [
-      "2027-03-30",
-      "2027-04-06",
       "2027-04-13",
       "2027-04-20",
-      "2027-04-27",
       "2027-05-04",
     ],
   );
@@ -91,13 +88,13 @@ test("a travel conflict cannot silently remain a challenge attempt", () => {
     {
       id: "trip",
       title: "Away",
-      start: "2027-03-30",
-      end: "2027-03-30",
+      start: "2027-04-13",
+      end: "2027-04-13",
       kind: "travel",
       tentative: false,
     },
   ];
-  const s = sessionFor("2027-03-30", trips);
+  const s = sessionFor("2027-04-13", trips);
   assert.equal(s.attempt, undefined);
   assert.equal(s.kind, "recovery");
   assert.equal(s.miles, 0);
@@ -106,14 +103,14 @@ test("unpartitioned Murph is the default and its aftermath replaces harder sessi
   assert.equal(DEFAULT_SETTINGS.partition, "unpartitioned");
   assert.equal(sessionFor("2027-03-05").kind,"murph");
   assert.match(sessionFor("2027-03-05").detail, /ALL pull-ups, then ALL push-ups, then ALL squats/);
-  assert.match(sessionFor("2027-04-13").detail, /all 100 regular kipping pull-ups/);
-  for (const d of ["2027-04-14", "2027-04-15", "2027-04-16"])
+  assert.match(sessionFor("2027-05-04").detail, /all 100 regular kipping pull-ups/);
+  for (const d of ["2027-05-05", "2027-05-06", "2027-05-07"])
     assert.equal(sessionFor(d).kind, "recovery");
 });
 test("only complete, unscaled, unpartitioned vested Murph logs count toward RX", () => {
   const log = {
     id: "1",
-    date: "2027-04-13",
+    date: "2027-05-04",
     title: "Murph",
     kind: "murph",
     partition: "unpartitioned",

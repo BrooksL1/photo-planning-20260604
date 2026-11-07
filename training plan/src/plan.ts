@@ -1,8 +1,8 @@
 import { revisedSession, REVISED_START } from "./revisedPlan";
+import { ATTEMPTS, BIRTHDAY, CHALLENGE_START, TAPER_START } from "./challenge";
+export { ATTEMPTS, BIRTHDAY, CHALLENGE_START, FLEX_DATE, TAPER_START } from "./challenge";
 
 export const START = "2026-10-27";
-export const BIRTHDAY = "2027-05-11";
-export const CHALLENGE_START = "2027-03-30";
 export const MILES_5K = 5 / 1.609344;
 export const MILES_10K = 10 / 1.609344;
 
@@ -111,27 +111,27 @@ export const PHASES: Phase[] = [
   {
     title: "Practice the demands",
     start: "2027-02-15",
-    end: "2027-03-21",
+    end: "2027-03-29",
     focus:
-      "Progress Friday unpartitioned rehearsals only after comfortable prior doses. Thursday threshold gets shorter for the biggest rehearsals; Sunday drops to eight miles. Monday/Wednesday include a 30-minute upper-body block before running. Keep most running conversational.",
+      "Sustain 30–32 running miles in full weeks through March 29. Progress Friday unpartitioned rehearsals only after comfortable prior doses. Thursday threshold gets shorter for the biggest rehearsals; Sunday drops to eight miles. Monday/Wednesday include a 30-minute upper-body block before running. Keep most running conversational; travel, re-entry, and recovery still reduce load.",
     checkpoint:
       "For 5K: 3 × 1 km near 7:00/mile, 2 min jog. For 10K: 3 × 2 km near 7:15/mile, 2 min jog. These are readiness clues, not guarantees.",
   },
   {
     title: "Freshen up",
-    start: "2027-03-22",
-    end: "2027-03-29",
+    start: TAPER_START,
+    end: "2027-04-12",
     focus:
-      "Reduce run volume and circuit reps. A few relaxed strides keep the legs sharp. No full Murph rehearsal or new vest load.",
+      "March 30–April 5: 25 running miles. April 6–12: 19 miles. These Tuesday–Monday taper blocks cross the Sunday calendar rows. Retain short controlled intervals and reduce upper-body work. No full Murph rehearsal or new vest load. Sunday April 11 is four easy miles before the first attempt.",
     checkpoint:
       "Normal sleep and easy-run effort, no joint pain, and recovered from the last strength session.",
   },
   {
-    title: "Six weeks. Three goals.",
+    title: "Four weeks. Three goals.",
     start: CHALLENGE_START,
     end: "2027-05-10",
     focus:
-      "One Tuesday attempt per week, rotating 5K, 10K, Murph twice. Attempts replace hard sessions. The other mornings support recovery.",
+      "April 13: 5K. April 20: 10K. April 27: recovery/maintenance, with an optional running retry only when recovered. May 4: vested unpartitioned Murph. Attempts replace hard sessions. Keep Murph last and reduce calisthenics during its final 7–10 days.",
     checkpoint:
       "A goal attempt is optional if readiness is missing. Log a scaled or controlled effort and carry the goal forward.",
   },
@@ -170,11 +170,6 @@ export function phaseFor(date: string) {
     PHASES[date < START ? 0 : PHASES.length - 1]
   );
 }
-export const ATTEMPTS = Array.from({ length: 6 }, (_, i) => ({
-  date: addDays(CHALLENGE_START, i * 7),
-  goal: (["5K", "10K", "Murph"] as const)[i % 3],
-}));
-
 function buildSession(
   date: string,
   trips: Trip[] = [],
@@ -259,7 +254,7 @@ function buildSession(
       detail: `Warm up shoulders, hips, and ankles for 5–8 min. Up to ${pulls} pull-ups, THEN ${pulls * 2} push-ups, THEN ${pulls * 3} air squats. Start with pull-up singles/doubles, small push-up sets with 2–3 reps in reserve, and squat sets of 10–15. Rest 60–120 sec as needed; finish each movement before the next. Cap the work at ${index < 16 ? 30 : 40} min, even if unfinished. These are ceilings, not mandatory jumps: repeat the last comfortable dose until you recover normally. ${settings.vestReady && index >= 10 ? "If readiness has been confirmed, use only a few small vested sets. Progress load, reps, or shorter rests one at a time, never together. Do not assume a fixed 20 lb vest is appropriate for every movement." : "Bodyweight only until repeatable unweighted work and normal recovery are established. No kipping is assumed."} Keep Monday/Friday practice small; reduce the weekly total if soreness affects the next session.`,
     };
   }
-  if (date >= "2027-03-22" && date < CHALLENGE_START && s.kind !== "rest") {
+  if (date >= TAPER_START && date < CHALLENGE_START && s.kind !== "rest") {
     s =
       dow === 1 || dow === 3
         ? {
@@ -411,9 +406,11 @@ export function sessionFor(date: string, trips: Trip[] = [], settings: Settings 
   const combined = s.kind === "run" && (s.murphMinutes ?? 0) > 0;
   const strength = s.kind === "strength" || s.kind === "murph";
   const recovery = s.kind === "recovery" || s.kind === "rest";
+  const light = !s.attempt && (s.tag === "Taper" || s.tag === "Challenge maintenance");
+  const effort = s.tag === "Flexible week" ? "Default easy run: 3–4 / 10. An optional, recovered running retry replaces it at 8–9." : s.tag === "Murph maintenance" ? "Calisthenics: 5–6 / 10, with 2–3 clean reps in reserve. Runs: 3–4." : light && (strength || combined) ? "Run: 3–4 / 10. Light calisthenics: at most 5, with at least 3 clean reps in reserve." : light && quality ? "Short intervals: 7 / 10; short threshold: 6. All other running: 3–4." : undefined;
   return { ...s,
     goal: s.attempt ? `Assess ${s.attempt} progress; attempts replace hard training.` : recovery ? "Restore readiness and absorb training." : quality ? "Improve running fitness through controlled, repeatable work." : strength ? "Build clean repeated sets for unpartitioned Murph." : combined ? "Build aerobic fitness and pulling/pushing strength without exhausting either." : "Build aerobic endurance while preserving recovery.",
-    rpe: s.attempt ? "8–9 for a ready, deliberate attempt; scale if not ready." : recovery ? "1–2 / 10" : quality ? "Intervals: 7–8 / 10; threshold: 6–7. Warm-up and recovery: 2–4." : strength ? "Murph work: 5–6 initially, later 6–7; leave 2–3 clean reps in reserve. Runs stay easy at 3–4." : combined ? "Run: 3–4 / 10. Upper body: sets at most 7, with 2–3 clean reps in reserve." : "3–4 / 10; comfortable full sentences.",
+    rpe: effort ?? (s.attempt ? "8–9 for a ready, deliberate attempt; scale if not ready." : recovery ? "1–2 / 10" : quality ? "Intervals: 7–8 / 10; threshold: 6–7. Warm-up and recovery: 2–4." : strength ? "Murph work: 5–6 initially, later 6–7; leave 2–3 clean reps in reserve. Runs stay easy at 3–4." : combined ? "Run: 3–4 / 10. Upper body: sets at most 7, with 2–3 clean reps in reserve." : "3–4 / 10; comfortable full sentences."),
     heartRate: recovery ? "No target; easy breathing." : s.attempt ? "No fixed cap; pace and effort guide the attempt, not an HR number to chase." : strength ? "No HR target for calisthenics: rep quality and recovery set the dose. Any practice runs stay conversational around 135–145 bpm." : quality ? "Threshold often 155–165 bpm; intervals may reach 165–175 late in a rep. HR lags: do not accelerate to force the number. Provisional effort guides, not measured zones." : "Start around 135–145 bpm with full-sentence conversation. Slow down if effort rises toward RPE 6 at 155 bpm. No HR target for upper-body work.",
   };
 }
