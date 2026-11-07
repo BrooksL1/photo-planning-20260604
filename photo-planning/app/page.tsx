@@ -1,13 +1,19 @@
 import Link from "next/link";
 import styles from "./home.module.css";
 
-function ToolIcon({ kind }: { kind: "sun" | "training" }) {
+function ToolIcon({ kind }: { kind: "sun" | "training" | "photos" }) {
   return (
     <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
       {kind === "sun" ? (
         <>
           <path d="M8 43h48M13 51h38M18 43a14 14 0 0 1 28 0M32 9v8M10 21l6 6M54 21l-6 6" />
           <circle cx="32" cy="31" r="22" strokeDasharray="1 7" opacity=".3" />
+        </>
+      ) : kind === "photos" ? (
+        <>
+          <rect x="13" y="12" width="40" height="42" rx="4" />
+          <path d="M7 19v34a7 7 0 0 0 7 7h32M18 43l10-12 8 8 6-6 6 10" />
+          <circle cx="41" cy="23" r="4" />
         </>
       ) : (
         <>
@@ -57,7 +63,7 @@ export default function Home() {
           <div className={styles.sectionLabel}>
             <span>THE TOOLBOX</span>
             <span className={styles.desktopCount}>01 — 03</span>
-            <span className={styles.mobileCount}>02 TOOLS / 06 SPACES</span>
+            <span className={styles.mobileCount}>03 TOOLS / 06 SPACES</span>
           </div>
           <Link
             href="/PhotoPlanning"
@@ -113,16 +119,16 @@ export default function Home() {
             </div>
           </Link>
           <div className={styles.emptySlot} aria-label="Space for a future tool"><span>Future tool</span></div>
-          <article className={`${styles.tool} ${styles.future}`}>
-            <span className={styles.futureIcon}>＋</span>
-            <div>
-              <span className={styles.number}>03 / WHAT’S NEXT</span>
-              <h2>Room for the next idea.</h2>
-              <p>More tools will find a home here.</p>
+          <Link href="/rank-photos" prefetch={false} className={`${styles.tool} ${styles.ranking}`}>
+            <div className={styles.toolIcon}><ToolIcon kind="photos" /></div>
+            <div className={styles.toolBody}>
+              <span className={styles.number}>03 / MAKE THE EDIT</span>
+              <h2>Rank &amp; Rate Photos</h2>
+              <p>Forty birds or a year of photographs. Compare with GPT-6.1 Terra, find the strongest frames, and choose the stars that fit your collection.</p>
+              <span className={styles.open}>Find your best <span>↗</span></span>
             </div>
-            <span className={styles.soon}>TO BE CONTINUED</span>
-            <span className={styles.mobileFuture}>Future tool</span>
-          </article>
+            <div className={styles.rankingArt} aria-hidden="true"><span>★ ★ ★ ★</span><strong>The considered edit.</strong><small>KEEP WHAT MATTERS.</small></div>
+          </Link>
           <div className={styles.emptySlot} aria-label="Space for a future tool"><span>Future tool</span></div>
         </section>
         <footer className={styles.footer}>

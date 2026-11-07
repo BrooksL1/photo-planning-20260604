@@ -1,0 +1,12 @@
+node_modules/
+**/node_modules/
+node_modules-before-repair/
+.next-before-repair/
+**/.next/
+.env*
+**/.env*
+training plan/private/
+lightroom/
+reports/
+research_notes/
+.git/

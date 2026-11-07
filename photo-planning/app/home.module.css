@@ -491,3 +491,4 @@
     color: #425b4a;
   }
 }
+.ranking .toolIcon,.ranking .open{color:#d5c1a5}.rankingArt{width:270px;min-width:220px;height:210px;border-radius:3px;margin-left:auto;background:#c5b39a;color:#2c3b31;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;align-self:center}.rankingArt>span{font-size:25px;letter-spacing:5px}.rankingArt strong{font:500 25px var(--font-fraunces),Georgia,serif;letter-spacing:-.8px}.rankingArt small{font:7px var(--font-geist-mono),monospace;letter-spacing:1.7px}@media(max-width:850px){.rankingArt{min-width:180px;width:210px;height:190px}.rankingArt strong{font-size:22px}}@media(max-width:600px){.rankingArt{display:none}.ranking .toolIcon{color:#776a52}}

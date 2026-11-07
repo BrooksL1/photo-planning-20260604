@@ -22,7 +22,7 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   title: "brooksL — Tools for a life well spent",
   description:
-    "Find the light. Put in the work. Photo Planning and Training from brooksL.",
+    "Find the light. Put in the work. Photo Planning, Training, and Rank & Rate Photos from brooksL.",
 };
 
 export default function RootLayout({
