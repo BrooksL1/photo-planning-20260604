@@ -1,3 +1,5 @@
+import { revisedSession, REVISED_START } from "./revisedPlan";
+
 export const START = "2026-10-27";
 export const BIRTHDAY = "2027-05-11";
 export const CHALLENGE_START = "2027-03-30";
@@ -63,6 +65,8 @@ export type Session = {
   miles: number;
   minutes: number;
   tag: string;
+  murphMinutes?: number;
+  startTime?: string;
   trip?: Trip;
   attempt?: "5K" | "10K" | "Murph";
   goal?: string;
@@ -82,7 +86,7 @@ export const PHASES: Phase[] = [
     start: START,
     end: "2026-11-22",
     focus:
-      "Redistribute to roughly 22 miles/week to fit 50-minute weekdays. Learn repeatable, submaximal strength work. Five runs, with one controlled quality session; three calisthenics exposures of different sizes. Easy effort is anchored near 140 bpm and RPE 3–4.",
+      "From November 7, build toward the revised 32-mile week: Monday/Wednesday upper body before easy runs, Tuesday intervals, Thursday controlled threshold, Friday Murph preparation, Saturday rest, and Sunday long. Travel and recovery reduce the workload. Easy effort is anchored around 135–145 bpm and RPE 3–4.",
     checkpoint:
       "Consistent pain-free mornings; 6 × 2–3 strict pull-ups with clean reps and 2 reps in reserve.",
   },
@@ -91,7 +95,7 @@ export const PHASES: Phase[] = [
     start: "2026-11-23",
     end: "2027-01-03",
     focus:
-      "One controlled quality run each week, alternating tempo and short intervals. Build repeatable nonfailure strength and sequential movement blocks gradually. Holiday travel becomes maintenance.",
+      "Build repeatable, nonfailure upper-body work on Monday and Wednesday. Tuesday intervals and Thursday threshold stay controlled; Friday progresses sequential pull-ups, push-ups, and squats. Holiday weeks become maintenance.",
     checkpoint:
       "A controlled 20-minute tempo and 18–24 pull-ups, then 36–48 push-ups, then 54–72 squats, with no lingering soreness.",
   },
@@ -109,7 +113,7 @@ export const PHASES: Phase[] = [
     start: "2027-02-15",
     end: "2027-03-21",
     focus:
-      "Progress partial unpartitioned rehearsals only as recovery allows, toward recoverable partial-volume blocks within the 50-minute morning limit. Introduce goal-pace segments after a successful checkpoint. Keep most running conversational.",
+      "Progress Friday unpartitioned rehearsals only after comfortable prior doses. Thursday threshold gets shorter for the biggest rehearsals; Sunday drops to eight miles. Monday/Wednesday include a 30-minute upper-body block before running. Keep most running conversational.",
     checkpoint:
       "For 5K: 3 × 1 km near 7:00/mile, 2 min jog. For 10K: 3 × 2 km near 7:15/mile, 2 min jog. These are readiness clues, not guarantees.",
   },
@@ -401,14 +405,16 @@ function buildSession(
 }
 
 export function sessionFor(date: string, trips: Trip[] = [], settings: Settings = DEFAULT_SETTINGS): Session {
-  const s = buildSession(date, trips, settings);
-  const quality = /tempo|interval/i.test(s.title);
-  const combined = s.title.includes("controlled strength");
+  const original = buildSession(date, trips, settings);
+  const s = date >= REVISED_START ? revisedSession(original, settings) : {...original, murphMinutes: original.kind === "strength" ? 30 : original.title.includes("controlled strength") ? 15 : 0};
+  const quality = /tempo|threshold|interval|assessment/i.test(s.title);
+  const combined = s.kind === "run" && (s.murphMinutes ?? 0) > 0;
+  const strength = s.kind === "strength" || s.kind === "murph";
   const recovery = s.kind === "recovery" || s.kind === "rest";
   return { ...s,
-    goal: s.attempt ? `Assess ${s.attempt} progress; attempts replace hard training.` : recovery ? "Restore readiness and absorb training." : quality ? "Improve running fitness through controlled, repeatable work." : s.kind === "strength" ? "Build clean repeated sets for unpartitioned Murph." : combined ? "Build aerobic fitness and pulling/pushing strength without exhausting either." : "Build aerobic endurance while preserving recovery.",
-    rpe: s.attempt ? "8–9 for a ready, deliberate attempt; scale if not ready." : recovery ? "1–2 / 10" : quality ? "Work: 6–8 / 10. Warm-up and recovery: 2–4." : s.kind === "strength" ? "5–6 overall; leave 2–3 clean reps in reserve." : combined ? "Run: 3–4 / 10. Strength: controlled, no failure." : "3–4 / 10; comfortable full sentences.",
-    heartRate: recovery ? "No target; easy breathing." : s.kind === "strength" || s.attempt === "Murph" ? "No HR target for strength. Rep quality and recovery set the dose." : s.attempt ? "No fixed cap; pace and effort guide the attempt, not an HR number to chase." : quality ? "Reported anchors: 155 ≈ RPE 6, 165 ≈ 7, 175 ≈ 8. HR lags; these are not measured zones." : "Around 140 bpm. Check breathing in the mid-140s; slow down well before 155 if effort reaches 6/10. Provisional, not a measured threshold.",
+    goal: s.attempt ? `Assess ${s.attempt} progress; attempts replace hard training.` : recovery ? "Restore readiness and absorb training." : quality ? "Improve running fitness through controlled, repeatable work." : strength ? "Build clean repeated sets for unpartitioned Murph." : combined ? "Build aerobic fitness and pulling/pushing strength without exhausting either." : "Build aerobic endurance while preserving recovery.",
+    rpe: s.attempt ? "8–9 for a ready, deliberate attempt; scale if not ready." : recovery ? "1–2 / 10" : quality ? "Intervals: 7–8 / 10; threshold: 6–7. Warm-up and recovery: 2–4." : strength ? "Murph work: 5–6 initially, later 6–7; leave 2–3 clean reps in reserve. Runs stay easy at 3–4." : combined ? "Run: 3–4 / 10. Upper body: sets at most 7, with 2–3 clean reps in reserve." : "3–4 / 10; comfortable full sentences.",
+    heartRate: recovery ? "No target; easy breathing." : s.attempt ? "No fixed cap; pace and effort guide the attempt, not an HR number to chase." : strength ? "No HR target for calisthenics: rep quality and recovery set the dose. Any practice runs stay conversational around 135–145 bpm." : quality ? "Threshold often 155–165 bpm; intervals may reach 165–175 late in a rep. HR lags: do not accelerate to force the number. Provisional effort guides, not measured zones." : "Start around 135–145 bpm with full-sentence conversation. Slow down if effort rises toward RPE 6 at 155 bpm. No HR target for upper-body work.",
   };
 }
 

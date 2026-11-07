@@ -64,26 +64,26 @@ test("travel reduces load, respects inclusive end dates, and returns gently", ()
     {
       id: "trip",
       title: "Away",
-      start: "2026-11-12",
-      end: "2026-11-15",
+      start: "2026-12-10",
+      end: "2026-12-13",
       kind: "travel",
       tentative: false,
     },
   ];
-  assert.equal(sessionFor("2026-11-15", trips).miles, 3);
-  assert.equal(sessionFor("2026-11-14", trips).kind, "rest");
-  assert.equal(sessionFor("2026-11-16", trips).kind, "recovery");
-  assert.equal(sessionFor("2026-11-17", trips).tag, "Re-entry");
+  assert.equal(sessionFor("2026-12-13", trips).miles, 3);
+  assert.equal(sessionFor("2026-12-12", trips).kind, "rest");
+  assert.equal(sessionFor("2026-12-14", trips).kind, "recovery");
+  assert.equal(sessionFor("2026-12-15", trips).tag, "Re-entry");
   const ski = [{ ...trips[0], kind: "ski" }];
-  assert.equal(sessionFor("2026-11-13", ski).miles, 0);
-  assert.match(sessionFor("2026-11-13", ski).detail, /Skip running/);
+  assert.equal(sessionFor("2026-12-11", ski).miles, 0);
+  assert.equal(sessionFor("2026-12-11", ski).murphMinutes, 0);
   const tentative = [{ ...trips[0], tentative: true }];
   assert.equal(
-    sessionFor("2026-11-15", tentative, {
+    sessionFor("2026-12-13", tentative, {
       ...DEFAULT_SETTINGS,
       includeTentative: false,
     }).miles,
-    8,
+    10,
   );
 });
 test("a travel conflict cannot silently remain a challenge attempt", () => {
@@ -104,8 +104,9 @@ test("a travel conflict cannot silently remain a challenge attempt", () => {
 });
 test("unpartitioned Murph is the default and its aftermath replaces harder sessions", () => {
   assert.equal(DEFAULT_SETTINGS.partition, "unpartitioned");
-  assert.match(sessionFor("2027-03-03").detail, /THEN/);
-  assert.match(sessionFor("2027-04-13").detail, /Complete each movement/);
+  assert.equal(sessionFor("2027-03-05").kind,"murph");
+  assert.match(sessionFor("2027-03-05").detail, /ALL pull-ups, then ALL push-ups, then ALL squats/);
+  assert.match(sessionFor("2027-04-13").detail, /all 100 regular kipping pull-ups/);
   for (const d of ["2027-04-14", "2027-04-15", "2027-04-16"])
     assert.equal(sessionFor(d).kind, "recovery");
 });
@@ -189,14 +190,18 @@ test("hybrid week redistributes miles across five runs and three strength exposu
  const week = Array.from({length:7},(_,i)=>sessionFor(addDays("2026-11-02",i)));
  assert.deepEqual(week.map(s=>s.miles),[3,4,0,4,3,0,8]);
  assert.match(week[0].title,/strength/); assert.match(week[4].title,/strength/);
- assert.equal(week[2].kind,"strength"); assert.match(week[3].heartRate,/140/);
+ assert.equal(week[2].kind,"strength"); assert.match(week[3].heartRate,/135–145/);
  assert.match(week[3].rpe,/3–4/);
  assert.ok(week.every(s=>s.goal && s.rpe && s.heartRate));
- const cutback=sessionFor("2026-11-17");
- assert.match(cutback.title,/cutback/); assert.match(cutback.rpe,/3–4/);
+ const cutback=sessionFor("2026-12-17");
+ assert.match(cutback.title,/reduced/); assert.match(cutback.rpe,/3–4/);
 });
 
-test("regular weekday sessions fit the 50-minute cap",()=>{for(let date=START;date<CHALLENGE_START;date=addDays(date,1)){const day=new Date(`${date}T12:00:00Z`).getUTCDay();if(day>=1&&day<=5) assert.ok(sessionFor(date).minutes<=50,date);}});
+test("historical weekdays keep their original cap; revised combined mornings allow longer",()=>{
+ for(let date=START;date<"2026-11-07";date=addDays(date,1)){const day=new Date(`${date}T12:00:00Z`).getUTCDay();if(day>=1&&day<=5) assert.ok(sessionFor(date).minutes<=50,date);}
+ assert.equal(sessionFor("2027-02-01").murphMinutes,30);
+ assert.ok(sessionFor("2027-02-01").minutes>50);
+});
 
 const {mergeGarmin, validActivities} = load("../../training plan/src/garmin.ts");
 const activity = {id:"123",date:"2026-10-28",startTime:"2026-10-28T07:00:00-04:00",type:"RUNNING",name:"Morning run",minutes:30,miles:3,avgHr:140,maxHr:150,device:"Garmin",importedAt:"2026-10-28T12:00:00Z"};

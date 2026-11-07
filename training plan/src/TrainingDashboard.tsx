@@ -31,8 +31,9 @@ import {
   type Workout,
 } from "./plan";
 import styles from "./training.module.css";
-import { sunday, weeklyMiles } from "./calendar";
-import { weeklyWeight, validWeights, type WeightMeasurement } from "./weight";
+import { sunday } from "./calendar";
+import { validWeights, type WeightMeasurement } from "./weight";
+import { weeklySummary } from "./weeklySummary";
 import { useMorningWeather } from "./useMorningWeather";
 import { mergeGarmin, validActivities } from "./garmin";
 
@@ -41,11 +42,12 @@ function compactTitle(s: Session) {
   if (s.trip) return "Away";
   if (/tempo/i.test(s.title)) return "Tempo";
   if (/interval/i.test(s.title)) return "Ints";
+  if (/threshold/i.test(s.title)) return "Thresh";
   if (s.kind === "strength" || s.kind === "murph") return "Murph";
   if (s.kind === "rest") return "Rest";
   if (s.kind === "recovery") return "Recov";
   if (/long/i.test(s.title)) return "Long";
-  return s.title.includes("strength") ? "Easy+" : "Easy";
+  return (s.murphMinutes ?? 0)>0 ? "Easy+" : "Easy";
 }
 function sMiles(s: Session) { return s.miles ? ` · ${s.miles} planned miles` : ""; }
 
@@ -384,7 +386,7 @@ export default function TrainingDashboard() {
       const s = sessionFor(date, data.trips, data.settings);
       if (s.kind === "rest") continue;
       // Floating local times keep the requested morning time at the destination.
-      const start = `${date.replaceAll("-", "")}T${data.settings.morning.replace(":", "")}00`;
+      const start = `${date.replaceAll("-", "")}T${(s.startTime??data.settings.morning).replace(":", "")}00`;
       const duration = Math.max(15, s.minutes);
       const stamp = new Date()
         .toISOString()
@@ -457,7 +459,7 @@ export default function TrainingDashboard() {
       target: "57:00",
       unit: "unpartitioned · 20 lb",
       sub: "1 mi · 100 / 200 / 300 · 1 mi",
-      baseline: "Starting point: 6 strict pull-ups",
+      baseline: "Updated baseline: 7 strict / 12 kipping pull-ups",
       log: results.murph,
       met: !!results.murph && results.murph.minutes <= 57,
     },
@@ -549,8 +551,8 @@ export default function TrainingDashboard() {
                     {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Week totals"].map(day => <div className={styles.weekday} key={day}>{day}</div>)}
                   </div>
                   {calendarWeeks.map(week => {
-                    const totals = weeklyMiles(week,data.logs);
-                    const weight = weeklyWeight(week[0].date,weights);
+                    const summary = weeklySummary(week,data.logs,weights,today);
+                    const format = (value: number) => Number(value.toFixed(1)).toString();
                     return <Fragment key={week[0].date}>
                       {week.map((s,index) => {
                         const logs=data.logs.filter(l=>l.date===s.date);
@@ -566,7 +568,7 @@ export default function TrainingDashboard() {
                           {s.minutes>0 && <span><span className={styles.desktopOnly}>{s.miles>0?`${Number(s.miles.toFixed(1))} mi · `:""}~{s.minutes} min</span><span className={styles.mobileOnly}>{s.miles>0?`${Number(s.miles.toFixed(1))}mi`:`${s.minutes}m`}</span></span>}
                           {weighIns.length>0 && <span className={styles.cellWeight} title="Recorded Garmin weigh-ins; tap for measurement times">
                             <span className={styles.desktopOnly}>Recorded weight</span>
-                            {weighIns.map(w=><span key={w.id}>{w.pounds.toFixed(1)} lb</span>)}
+                            {weighIns.map(w=><span key={w.id} title={`${w.pounds.toFixed(1)} lb`}>{w.pounds.toFixed(1)}<span className={styles.desktopOnly}> lb</span></span>)}
                           </span>}
                           {forecast && <span className={styles.cellWeather} title="Hourly forecast nearest your workout start">
                             <span className={styles.desktopOnly}>{forecast.time} · {forecast.tempF===null?"Temp unavailable":`${Math.round(forecast.tempF)}°F`}<br/>☂ {forecast.rain===null?"Rain chance unavailable":`${Math.round(forecast.rain)}% rain chance`}</span>
@@ -576,20 +578,29 @@ export default function TrainingDashboard() {
                           {logs.length>0 && <span className={styles.cellLogged} aria-label={logs.some(l=>l.status!=="skipped")?"Logged":"Skipped"}><span className={styles.desktopOnly}>{logs.some(l=>l.status!=="skipped")?"✓ Logged":"Skipped"}</span><span className={styles.mobileOnly}>{logs.some(l=>l.status!=="skipped")?"✓":"–"}</span></span>}
                         </button>;
                       })}
-                      <div className={styles.weekTotals} aria-label={`Week of ${week[0].date}: ${totals.planned.toFixed(1)} miles planned, ${totals.logged.toFixed(1)} miles logged`}>
-                        <div className={styles.weekMileage}><span>WEEK TOTAL</span><strong>{totals.planned.toFixed(1)} mi</strong><span>planned</span><strong>{totals.logged.toFixed(1)} mi</strong><span>logged</span></div>
-                        <div className={styles.weekWeight} aria-label={`Weight for week ending ${weight.end}`}>
-                          <span>Target weight <strong>{weight.target===null?"—":`${weight.target} lb`}</strong></span>
-                          <span title={`Garmin · arithmetic average of ${weight.count} measurements this Sunday–Saturday week; missing days are excluded.`}>Avg weight <strong>{weight.average===null?"—":`${weight.average.toFixed(1)} lb`}</strong></span>
-                          <small>{weight.count ? `Garmin · ${weight.count} weigh-in${weight.count===1?"":"s"}` : "No Garmin weigh-ins"}</small>
+                      <div className={`${styles.weekTotals} ${week[6].date<today?styles.calendarPast:""}`} data-week-summary={summary.start} aria-label={`Week of ${summary.start}. ${summary.status}. Target: ${format(summary.plannedMiles)} miles, ${format(summary.plannedMurphMinutes)} Murph minutes, ${summary.weightTarget??"no"} pounds.${summary.showResults?` Recorded: ${format(summary.loggedMiles)} miles, ${format(summary.loggedMurphMinutes)} Murph minutes, average weight ${summary.weightAverage?.toFixed(1)??"unavailable"} pounds from ${summary.weighIns} weigh-ins.`:""}`}>
+                        <span className={styles.summaryStatus}>{summary.status}</span>
+                        <span className={styles.summaryLegend}>{summary.showResults ? "Logged / target" : "Targets"}</span>
+                        <div className={styles.summaryMetric}>
+                          <span>Miles</span>
+                          <strong>{summary.showResults && <>{format(summary.loggedMiles)}<span className={styles.summaryDivider}> / </span></>}{format(summary.plannedMiles)}</strong>
                         </div>
+                        <div className={styles.summaryMetric} title="Murph minutes include the upper-body/calisthenics block and its rests. Garmin Cardio counts as Murph work. Explicit manual time splits take precedence.">
+                          <span>Murph <span className={styles.summaryUnit}>min</span></span>
+                          <strong>{summary.showResults && <>{format(summary.loggedMurphMinutes)}<span className={styles.summaryDivider}> / </span></>}{format(summary.plannedMurphMinutes)}</strong>
+                        </div>
+                        <div className={styles.summaryMetric} title={`Average of ${summary.weighIns} Garmin weigh-ins in this Sunday–Saturday week, through today. Missing days are excluded.`}>
+                          <span>{summary.showResults ? "Avg lb" : "Weight lb"}</span>
+                          <strong>{summary.showResults && <>{summary.weightAverage?.toFixed(1)??"—"}<span className={styles.summaryDivider}> / </span></>}{summary.weightTarget??"—"}</strong>
+                        </div>
+                        {summary.showResults && <small className={styles.summaryWeighIns}>{summary.weighIns} weigh-in{summary.weighIns===1?"":"s"}</small>}
                       </div>
                     </Fragment>;
                   })}
                 </div>
               </div>
               <p className={styles.formHelp}>{weatherMessage} <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a></p>
-              <p className={styles.formHelp}>Scroll up for past weeks. Tap a day for workout details, weigh-in times, and logging. Daily weights are recorded Garmin measurements in lb; days without a weigh-in stay blank. Easy+ includes strength; Ints means intervals. Weather is °F and rain chance.</p>
+              <p className={styles.formHelp}>Weekly cell: logged / target miles, Murph minutes, and average / target lb. Cardio counts as Murph time; log runs separately or enter a manual time split. Current week is so far; zero means nothing logged. Results start Oct 25. Future weeks show targets. Tap a day for details and logging.</p>
             </section>
           </>
         )}
@@ -631,13 +642,15 @@ export default function TrainingDashboard() {
               </button>
             </div>
             <p className={styles.sectionCopy}>
-              A proposed progression from 201 lb, a 25-minute 5K, 25 miles per
-              week, and 6 strict pull-ups. No weights are required; use a
-              pull-up bar, bodyweight, and a vest after readiness. No injuries
-              were reported. The targets are ambitious; checkpoints guide
-              progression rather than promise a result. Six scheduled mornings
-              means five runs and three strength exposures in the build, with
-              Saturday off. Sundays can take 90–110 minutes.
+              Revised November 7 from your reported 192.5 lb, 25-minute 5K,
+              7 strict pull-ups, 12 regular kipping pull-ups, and 35 clean push-ups.
+              Full weeks build toward 32 running miles: 10 Sunday, 4.5 Monday
+              and Wednesday, 5.5 Tuesday and Thursday, and 2 Friday. Monday
+              and Wednesday upper-body work starts at 5:30 before the easy run;
+              Tuesday has intervals, Thursday threshold, and Friday the main
+              unpartitioned Murph practice. Saturday is rest. Morning durations
+              include rests and preparation; the combined mornings exceed 50
+              minutes. Reduced weeks and readiness checks govern progression.
             </p>
             <div className={styles.phases}>
               {PHASES.map((p, i) => (
@@ -704,10 +717,10 @@ export default function TrainingDashboard() {
               <p>
                 Before a full vested Murph, work up through repeated partial
                 sessions with clean movement and normal recovery. Don’t jump
-                from six strict pull-ups to 100 vested reps. Review readiness
+                from seven strict pull-ups to 100 vested reps. Review readiness
                 with a qualified coach; an injury or exercise restriction needs
-                an individualized adjustment. No target body weight is
-                prescribed.
+                an individualized adjustment. Weight targets reflect your
+                requested tracking goals.
               </p>
               <p>
                 Program design is a conservative synthesis, not a copied or
@@ -775,13 +788,13 @@ export default function TrainingDashboard() {
               <div>
                 <strong>
                   {Math.max(
-                    6,
+                    7,
                     ...data.logs
                       .filter((l) => l.status !== "skipped")
                       .map((l) => l.strictMax),
                   )}
                 </strong>
-                <span>best strict set · baseline 6</span>
+                <span>best strict set · baseline 7</span>
               </div>
             </div>
             {!data.logs.length ? (
@@ -1136,7 +1149,7 @@ export default function TrainingDashboard() {
         {selected && detailOnly && <div>
           <div className={styles.dialogHeader}><div><p className={styles.eyebrow}>{displayDate(selected.date, {weekday:"long", month:"long",day:"numeric"})}</p><h2>{selected.title}</h2></div><button type="button" aria-label="Close workout details" onClick={()=>setSelected(null)}>✕</button></div>
           <div className={styles.workoutDetails}>
-            <dl><dt>Start / time</dt><dd>{data.settings.morning} · approximately {selected.minutes} minutes{sMiles(selected)}</dd>
+            <dl><dt>Start / time</dt><dd>{selected.startTime??data.settings.morning} · approximately {selected.minutes} minutes{sMiles(selected)}</dd>
             <dt>Goal</dt><dd>{selected.goal}</dd><dt>Effort / RPE</dt><dd>{selected.rpe}</dd><dt>Heart rate</dt><dd>{selected.heartRate}</dd></dl>
             {!!weightsByDate.get(selected.date)?.length && <section className={styles.recordedWeights} aria-label="Recorded Garmin weigh-ins">
               <h3>Recorded weight · Garmin</h3>
@@ -1206,7 +1219,7 @@ export default function TrainingDashboard() {
                   }
                 >
                   <option value="run">Run</option>
-                  <option value="strength">Strength</option>
+                  <option value="strength">Murph / strength</option>
                   <option value="murph">Murph</option>
                   <option value="recovery">Recovery</option>
                 </select>
@@ -1267,7 +1280,7 @@ export default function TrainingDashboard() {
                   ["avgHr", "Average heart rate · bpm", "1"],
                   ["maxHr", "Maximum heart rate · bpm", "1"],
                   ["runMinutes", "Running time · minutes", "0.01"],
-                  ["strengthMinutes", "Strength time · minutes", "0.01"],
+                  ["strengthMinutes", "Murph / strength time · minutes", "0.01"],
                   ["pullups", "Total pull-ups", "1"],
                   ["pushups", "Total push-ups", "1"],
                   ["squats", "Total air squats", "1"],
