@@ -7,7 +7,7 @@ import { pairing, forgetPairing, networkPermission, localFetch, localJSON } from
 import styles from "./rank.module.css";
 type LocalConfig = Config & { references?: boolean };
 type LocalRow = Omit<Row, "strength"> & { name: string; rating: number; override: number | null };
-type Report = { run_id: string; config: LocalConfig & { bands: string | [number, number][] }; stage: number; rows: LocalRow[]; total: number; spent: number; held: number; done: number; pending: number; uncertain: number; complete: boolean; bands: Record<string, number>; metrics: { total: number; compared: number; components: number }; references: number };
+type Report = { summary_only?: boolean; run_id: string; config: LocalConfig & { bands: string | [number, number][] }; stage: number; rows: LocalRow[]; total: number; spent: number; held: number; done: number; pending: number; uncertain: number; complete: boolean; bands: Record<string, number>; metrics: { total: number; compared: number; components: number }; references: number };
 type State = { connected: boolean; busy: boolean; caption: string; error: string; revision: number; catalog_name: string; has_run: boolean; active: string | null; report: Omit<Report, "rows"> | null };
 function toConfig(report: Report): LocalConfig { return { ...report.config, bands: Array.isArray(report.config.bands) ? report.config.bands.map(([stars, percent]) => `${stars}:${percent}`).join(",") : report.config.bands }; }
 function LocalPreview({ token, photo, large = false }: { token: string; photo: Photo; large?: boolean }) {
@@ -35,7 +35,7 @@ export default function LightroomRank() {
       const next = await localJSON<State>(token, "/status"); if (!mounted.current) return;
       setState(next);
       if (!next.connected) throw new Error("Lightroom is no longer connected. Reopen Rank & Rate from Lightroom on this Mac.");
-      if (next.has_run && next.revision !== revision.current) {
+      if (next.has_run && next.revision !== revision.current && (!next.report?.summary_only || runId.current !== next.report?.run_id)) {
         const value = await localJSON<{ report: Report }>(token, "/report"); if (!mounted.current) return;
         setReport(value.report); revision.current = next.revision;
         if (value.report.run_id !== runId.current) { runId.current = value.report.run_id; setConfig(toConfig(value.report)); setSelected(null); setSearch(""); setFilter("all"); }
