@@ -16,8 +16,8 @@ const {
   validateLogs,
 } = load("../../training plan/src/plan.ts");
 
-test("three primary attempts start four weeks before the birthday with Murph last", () => {
-  assert.equal(dayDiff(BIRTHDAY, CHALLENGE_START), 28);
+test("three primary attempts use the last four Sundays before the birthday with Murph last", () => {
+  assert.equal(dayDiff(BIRTHDAY, CHALLENGE_START), 23);
   assert.deepEqual(
     ATTEMPTS.map((a) => a.goal),
     ["5K", "10K", "Murph"],
@@ -25,15 +25,18 @@ test("three primary attempts start four weeks before the birthday with Murph las
   assert.deepEqual(
     ATTEMPTS.map((a) => a.date),
     [
-      "2027-04-13",
-      "2027-04-20",
-      "2027-05-04",
+      "2027-04-18",
+      "2027-04-25",
+      "2027-05-09",
     ],
   );
-  for (const a of ATTEMPTS) assert.equal(sessionFor(a.date).attempt, a.goal);
+  for (const a of ATTEMPTS) {
+    assert.equal(sessionFor(a.date).attempt, a.goal);
+    assert.equal(new Date(a.date + "T12:00:00Z").getUTCDay(), 0);
+  }
 });
 test("complete weeks have six mornings, Saturday rest, and 22 baseline running miles", () => {
-  for (let week = "2026-11-02"; week < "2027-05-04"; week = addDays(week, 7)) {
+  for (let week = "2026-11-02"; week < "2027-05-09"; week = addDays(week, 7)) {
     const sessions = Array.from({ length: 7 }, (_, i) =>
       sessionFor(addDays(week, i)),
     );
@@ -88,13 +91,13 @@ test("a travel conflict cannot silently remain a challenge attempt", () => {
     {
       id: "trip",
       title: "Away",
-      start: "2027-04-13",
-      end: "2027-04-13",
+      start: "2027-04-18",
+      end: "2027-04-18",
       kind: "travel",
       tentative: false,
     },
   ];
-  const s = sessionFor("2027-04-13", trips);
+  const s = sessionFor("2027-04-18", trips);
   assert.equal(s.attempt, undefined);
   assert.equal(s.kind, "recovery");
   assert.equal(s.miles, 0);
@@ -103,14 +106,16 @@ test("unpartitioned Murph is the default and its aftermath replaces harder sessi
   assert.equal(DEFAULT_SETTINGS.partition, "unpartitioned");
   assert.equal(sessionFor("2027-03-05").kind,"murph");
   assert.match(sessionFor("2027-03-05").detail, /ALL pull-ups, then ALL push-ups, then ALL squats/);
-  assert.match(sessionFor("2027-05-04").detail, /all 100 regular kipping pull-ups/);
-  for (const d of ["2027-05-05", "2027-05-06", "2027-05-07"])
-    assert.equal(sessionFor(d).kind, "recovery");
+  assert.match(sessionFor("2027-05-09").detail, /all 100 regular kipping pull-ups/);
+  assert.equal(sessionFor("2027-05-10").kind, "recovery");
+  for (const d of ["2027-05-11", "2027-05-12"])
+    assert.equal(sessionFor(d).kind, "rest");
+  assert.match(sessionFor(BIRTHDAY).detail, /recover from Sunday/);
 });
 test("only complete, unscaled, unpartitioned vested Murph logs count toward RX", () => {
   const log = {
     id: "1",
-    date: "2027-05-04",
+    date: "2027-05-09",
     title: "Murph",
     kind: "murph",
     partition: "unpartitioned",

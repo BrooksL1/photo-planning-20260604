@@ -111,27 +111,27 @@ export const PHASES: Phase[] = [
   {
     title: "Practice the demands",
     start: "2027-02-15",
-    end: "2027-03-29",
+    end: "2027-04-03",
     focus:
-      "Sustain 30–32 running miles in full weeks through March 29. Progress Friday unpartitioned rehearsals only after comfortable prior doses. Thursday threshold gets shorter for the biggest rehearsals; Sunday drops to eight miles. Monday/Wednesday include a 30-minute upper-body block before running. Keep most running conversational; travel, re-entry, and recovery still reduce load.",
+      "Sustain 30–32 running miles in full weeks through April 3. Progress Friday unpartitioned rehearsals only after comfortable prior doses. Thursday threshold gets shorter for the biggest rehearsals; Sunday drops to eight miles. Monday/Wednesday include a 30-minute upper-body block before running. Keep most running conversational; travel, re-entry, and recovery still reduce load.",
     checkpoint:
       "For 5K: 3 × 1 km near 7:00/mile, 2 min jog. For 10K: 3 × 2 km near 7:15/mile, 2 min jog. These are readiness clues, not guarantees.",
   },
   {
     title: "Freshen up",
     start: TAPER_START,
-    end: "2027-04-12",
+    end: "2027-04-17",
     focus:
-      "March 30–April 5: 25 running miles. April 6–12: 19 miles. These Tuesday–Monday taper blocks cross the Sunday calendar rows. Retain short controlled intervals and reduce upper-body work. No full Murph rehearsal or new vest load. Sunday April 11 is four easy miles before the first attempt.",
+      "April 4–10: 25 running miles. April 11–17: 19 miles. These taper blocks match the Sunday–Saturday calendar rows. Retain short controlled intervals and reduce upper-body work. No full Murph rehearsal or new vest load. Friday April 16 has only light unvested upper-body technique, with no squats; Saturday is rest before Sunday's 5K.",
     checkpoint:
       "Normal sleep and easy-run effort, no joint pain, and recovered from the last strength session.",
   },
   {
-    title: "Four weeks. Three goals.",
+    title: "Four Sundays. Three goals.",
     start: CHALLENGE_START,
     end: "2027-05-10",
     focus:
-      "April 13: 5K. April 20: 10K. April 27: recovery/maintenance, with an optional running retry only when recovered. May 4: vested unpartitioned Murph. Attempts replace hard sessions. Keep Murph last and reduce calisthenics during its final 7–10 days.",
+      "Sunday April 18: 5K. April 25: 10K. May 2: recovery/maintenance, with an optional running retry only when recovered. May 9: vested unpartitioned Murph. Sunday attempts replace the long run and weekday hard sessions. Mondays support recovery, and Saturdays remain rest. Reduce calisthenics during the final 7–10 days before Murph.",
     checkpoint:
       "A goal attempt is optional if readiness is missing. Log a scaled or controlled effort and carry the goal forward.",
   },
@@ -198,7 +198,7 @@ function buildSession(
         date === BIRTHDAY
           ? "Happy 45th, Brooks."
           : "Outside the training block",
-      detail: "Review your journal, recover, and choose what comes next.",
+      detail: date === BIRTHDAY ? "Celebrate your birthday and recover from Sunday's Murph. Gentle walking and mobility only; continue recovery through May 12 and resume running when soreness and easy effort are normal." : "Review your journal, recover, and choose what comes next.",
     };
   if (dow === 6)
     s = {
@@ -300,7 +300,7 @@ function buildSession(
         detail:
           attempt.goal === "Murph"
             ? `This challenge requires a longer morning (about 75 min including preparation); it cannot fit a 50-minute cap. Target 57:00. 1 mile + 100 pull-ups / 200 push-ups / 300 air squats + 1 mile, with a 20 lb vest. ${settings.partition === "partitioned" ? "Partition as 20 rounds of 5/10/15; smaller sets are fine." : "Complete each movement before beginning the next."} Attempt RX only after repeated vested practice and normal recovery. Otherwise do a scaled rehearsal. Practice budget: 9 min first mile + 12 min pull-ups + 12 min push-ups + 12 min squats + 10 min final mile + 2 min transitions = 57 min. These are targets, not a reason to rush unsafe reps.`
-            : `Target ${attempt.goal === "5K" ? "7:00/mile, about 21:45 total" : "45:00 (7:15/mile); allow about 65 min with warm-up/cooldown, beyond the normal weekday cap"}. Warm up 10–15 min, drills and 4 relaxed strides. Run a measured route, start controlled, then cool down 10 min. The logged miles and time should cover the timed effort only. If the checkpoint is not comfortable, make this a controlled run.`,
+            : `Target ${attempt.goal === "5K" ? "7:00/mile, about 21:45 total" : "45:00 (7:15/mile); allow about 65 min with warm-up/cooldown"}. Warm up 10–15 min, drills and 4 relaxed strides. Run a measured route, start controlled, then cool down 10 min. The logged miles and time should cover the timed effort only. If the checkpoint is not comfortable, make this a controlled run.`,
       };
     else if (s.kind !== "rest")
       s = recentMurph
@@ -328,7 +328,7 @@ function buildSession(
               minutes: dow === 0 ? 40 : 30,
               title: "Easy maintenance run",
               detail:
-                "Keep every mile conversational. Shorten or walk if recovering from the last attempt. Sunday stays short ahead of Tuesday.",
+                "Keep every mile conversational. Shorten or walk if recovering from the last attempt. Protect the next Sunday attempt.",
             };
   }
   const trip = trips.find(

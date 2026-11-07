@@ -1,5 +1,5 @@
 import type { Session, Settings } from "./plan";
-import { BIRTHDAY, CHALLENGE_START, FLEX_DATE, TAPER_START } from "./challenge";
+import { ATTEMPTS, BIRTHDAY, CHALLENGE_START, FLEX_DATE, TAPER_START } from "./challenge";
 
 export const REVISED_START = "2026-11-07";
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(a + "T12:00:00Z") - Date.parse(b + "T12:00:00Z")) / 86400000);
@@ -29,8 +29,9 @@ const fridays: Record<string, Friday> = {
   "2027-03-12": {vest:[65,130,195],body:[25,50,75],minutes:60},
   "2027-03-19": {vest:[80,160,240],body:[20,40,60],minutes:60},
   "2027-03-26": {vest:[65,130,195],body:[15,30,45],minutes:50},
-  "2027-04-02": {vest:[0,0,0],body:[20,40,60],minutes:20},
-  "2027-04-09": {vest:[0,0,0],body:[10,20,30],minutes:10},
+  "2027-04-02": {vest:[65,130,195],body:[15,30,45],minutes:50},
+  "2027-04-09": {vest:[0,0,0],body:[20,40,60],minutes:20},
+  "2027-04-16": {vest:[0,0,0],body:[6,20,0],minutes:10},
 };
 const sets = (total: number, size: number) => `${Math.floor(total / size)} × ${size}${total % size ? ` + 1 × ${total % size}` : ""} = ${total}`;
 const easy = "RPE 3–4, around 135–145 bpm with full-sentence conversation. Slow or walk hills if effort rises; 155 bpm at RPE 6 is too hard for an easy run.";
@@ -41,17 +42,16 @@ function challengeSession(original: Session): Session {
   if (original.attempt) return {...original, murphMinutes:original.attempt === "Murph" ? 57 : 0,
     detail: original.attempt === "Murph" ? "Allow about 75 minutes including preparation. Timed goal: 57:00. In a 20 lb vest: run 1 mile, complete all 100 regular kipping pull-ups, all 200 clean push-ups, all 300 air squats, then run 1 mile. Small sets and rests within each movement are allowed. Attempt only after repeatable vested practice and normal recovery; otherwise log a scaled rehearsal. No butterfly pull-ups assumed. Record the actual run and calisthenics time when available; no fixed movement split is established by your historical recording." : original.detail};
   if (original.trip || original.tag === "Re-entry" || original.title === "Recover from Murph") return {...original, murphMinutes:0};
-  if (["2027-04-14","2027-04-21"].includes(date)) return {...original,kind:"recovery",miles:0,minutes:25,murphMinutes:0,title:"Recovery · walking and mobility",detail:"Recover from Tuesday's running attempt. Walk and mobilize gently; no make-up work. Resume easy running only when soreness and effort are normal."};
-  if (date === "2027-04-23") return {...original,kind:"murph",miles:2,minutes:62,murphMinutes:40,tag:"Murph maintenance",title:"Controlled partial Murph · readiness rehearsal",
-    detail:`One unvested easy mile, then up to 40 minutes of sequential calisthenics, then one unvested easy mile. Only if recovered from the 10K and prior vested doses were comfortable: with a 20 lb vest, complete ALL 50 regular kipping pull-ups (10 × 5), THEN ALL 100 clean push-ups (20 × 5), THEN ALL 150 air squats (10 × 15). Rest 60–90 seconds for pulls, 30–60 for pushes, and 20–40 for squats. RPE 5–6; no race against the clock, no failure, and no extra reps. This is the last substantial calisthenics session, 11 days before Murph. If still sore or planning an April 27 running retry, replace it with 10 minutes unvested technique: 3 × 2 strict pull-ups, then 2 × 10 clean push-ups, resting 60–90 seconds, and no squats. Record actual Cardio minutes. ${easy} ${reserve}`};
+  if (ATTEMPTS.some(a=>a.goal!=="Murph" && daysBetween(date,a.date)===1) || daysBetween(date,FLEX_DATE)===1) return {...original,kind:"recovery",miles:0,minutes:25,murphMinutes:0,title:"Recovery · walking and mobility",detail:"Recover from Sunday's running attempt or flexible training day. Walk and mobilize gently; no make-up work. Resume easy running only when soreness and effort are normal."};
+  if (date === "2027-04-28") return {...original,kind:"murph",miles:2,minutes:62,murphMinutes:40,tag:"Murph maintenance",title:"Controlled partial Murph · readiness rehearsal",
+    detail:`One unvested easy mile, then up to 40 minutes of sequential calisthenics, then one unvested easy mile. Only if recovered from the 10K and prior vested doses were comfortable: with a 20 lb vest, complete ALL 50 regular kipping pull-ups (10 × 5), THEN ALL 100 clean push-ups (20 × 5), THEN ALL 150 air squats (10 × 15). Rest 60–90 seconds for pulls, 30–60 for pushes, and 20–40 for squats. RPE 5–6; no race against the clock, no failure, and no extra reps. This is the last substantial calisthenics session, 11 days before Murph. If still sore or planning a May 2 running retry, replace it with 10 minutes unvested technique: 3 × 2 strict pull-ups, then 2 × 10 clean push-ups, resting 60–90 seconds, and no squats. Record actual Cardio minutes. ${easy} ${reserve}`};
   if (date === FLEX_DATE) return {...original,kind:"run",miles:3,minutes:33,murphMinutes:0,tag:"Flexible week",title:"Flexible day · easy run or optional running retry",
-    detail:`Default: 3 easy miles, ${easy} An optional retry of ONE missed running goal can replace this run only with normal recovery, a suitable route and weather, and no substantial April 23 Murph work. Choose 5K at 7:00/mile (about 21:45) or 10K in 45:00 (about 7:15/mile); warm up 10–15 minutes with 4 relaxed strides, then cool down 10 minutes. Do not attempt both. The calendar mileage target assumes the easy run; log actual work if you retry. After a retry, replace April 28 with walking and keep April 29–May 3 easy, with no calisthenics. If not ready, use this week for recovery; no Murph retry is scheduled.`};
-  const beforeAttempt = ["2027-04-19","2027-05-03"].includes(date);
-  const miles = date === "2027-04-25" ? 5 : dow === 0 ? 3 : beforeAttempt ? 2.5 : date === "2027-05-10" ? 2 : dow === 5 ? 2 : 3;
-  const technique = ["2027-04-16","2027-04-26","2027-04-30"].includes(date);
+    detail:`Default: 3 easy miles, ${easy} An optional retry of ONE missed running goal can replace this run only with normal recovery, a suitable route and weather, and no substantial April 28 Murph work. Choose 5K at 7:00/mile (about 21:45) or 10K in 45:00 (about 7:15/mile); warm up 10–15 minutes with 4 relaxed strides, then cool down 10 minutes. Do not attempt both. The calendar mileage target assumes the easy run; log actual work if you retry. May 3 is walking and mobility; after a retry, keep May 4–8 easy, with no calisthenics. If not ready, use this week for recovery; no Murph retry is scheduled.`};
+  const miles = dow === 5 ? 2 : 3;
+  const technique = ["2027-04-21","2027-05-05"].includes(date);
   return {...original,kind:"run",miles,minutes:Math.ceil(miles*11)+(technique?10:0),murphMinutes:technique?10:0,tag:"Challenge maintenance",
     title:technique ? "Easy run + light upper-body technique" : "Easy maintenance run",
-    detail:`${miles} easy miles. ${easy} ${technique ? "Optional 10 minutes unvested technique including preparation: 3 × 2 strict pull-ups, then 2 × 10 clean push-ups; rest 60–90 seconds, RPE at most 5, with at least 3 clean reps in reserve. No squats, vest, butterfly work or failure. Skip if soreness remains or if you attempted a running retry on April 27." : "No threshold or additional interval workout; attempts replace quality sessions."} ${beforeAttempt ? "No upper-body work before Tuesday's attempt." : ""} ${date >= "2027-04-25" ? "Final Murph taper: no substantial calisthenics in the final 7–10 days. Resume running after Murph only when soreness and easy effort are normal; otherwise walk." : ""} ${date === "2027-04-28" ? "If you retried a running goal yesterday, replace this run with 20–30 minutes walking and mobility." : ""}`};
+    detail:`${miles} easy miles. ${easy} ${technique ? "Optional 10 minutes unvested technique including preparation: 3 × 2 strict pull-ups, then 2 × 10 clean push-ups; rest 60–90 seconds, RPE at most 5, with at least 3 clean reps in reserve. No squats, vest, butterfly work or failure. Skip if soreness remains or if you attempted a running retry on May 2." : "No threshold or additional interval workout; Sunday attempts replace quality sessions."} ${dow === 5 ? "No Murph practice this Friday; Saturday is rest before Sunday's attempt or flexible day." : ""} ${date >= "2027-04-29" ? "Final Murph taper: no substantial calisthenics in the final 7–10 days. Resume running after Murph only when soreness and easy effort are normal; otherwise walk." : ""}`};
 }
 
 export function revisedSession(original: Session, settings: Settings): Session {
@@ -63,7 +63,7 @@ export function revisedSession(original: Session, settings: Settings): Session {
   if (dow === 0 && ["2026-11-08","2026-11-22","2027-03-14","2027-03-21"].includes(date)) miles = 8;
   if (date === "2026-12-06") miles = 9;
   if (reduced) miles *= .75;
-  if (taper) miles = (date < "2027-04-06" ? [7,3.5,4.5,3.5,4.5,2,0] : [4,2.5,4,3,3.5,2,0])[dow];
+  if (taper) miles = (daysBetween(date,TAPER_START) < 7 ? [7,3.5,4.5,3.5,4.5,2,0] : [4,2.5,4,3,3.5,2,0])[dow];
   let s: Session = {...original,kind:"run",miles,minutes:Math.ceil(miles * 11),murphMinutes:0,tag:taper?"Taper":reduced?"Reduced week":"Revised morning plan"};
   if (dow === 0) s = {...s,title:"Sunday long easy run",detail:`${miles} easy miles. ${easy} No fast finish. Shorter Sundays support the largest Friday rehearsals. Fuel and drink for the longer morning.`};
   else if (dow === 1 || dow === 3) {
@@ -84,10 +84,10 @@ export function revisedSession(original: Session, settings: Settings): Session {
     if (date >= "2027-01-04") work = interval ? "4 × 4 minutes at RPE 7–8; 2-minute jog recoveries" : "2 × 9 minutes at RPE 6–7; 3-minute jog between";
     if (date >= "2027-02-22") work = interval ? "5 × 4 minutes at RPE 7–8; 2-minute jog recoveries" : "2 × 10 minutes at RPE 6–7; 3-minute jog between";
     if (date >= "2027-03-08") work = interval ? "4 × 4 minutes at RPE 7–8; 2-minute jog recoveries" : "2 × 6 minutes at RPE 6; 3-minute jog between";
-    if (taper) work = interval ? "4 × 1 minute at RPE 7; 2-minute jog recoveries" : date < "2027-04-06" ? "2 × 4 minutes at RPE 6; 3-minute jog between" : "Easy running only; no threshold work";
+    if (taper) work = interval ? "4 × 1 minute at RPE 7; 2-minute jog recoveries" : daysBetween(date,TAPER_START) < 7 ? "2 × 4 minutes at RPE 6; 3-minute jog between" : "Easy running only; no threshold work";
     if (reduced) work = "Easy running only during this reduced week";
     const assessment = ["2026-12-15","2027-02-23"].includes(date) && !reduced;
-    s = {...s,title:assessment?"Measured 5K assessment":taper && !interval && date >= "2027-04-06" || reduced?"Easy run · reduced load":interval?"Tuesday intervals":"Thursday threshold",
+    s = {...s,title:assessment?"Measured 5K assessment":taper && !interval && daysBetween(date,TAPER_START) >= 7 || reduced?"Easy run · reduced load":interval?"Tuesday intervals":"Thursday threshold",
       detail:`${miles} miles TOTAL, including warm-up, recoveries, and cooldown. Run 10–15 minutes easy before the work and at least 8–10 minutes easy afterward. ${assessment ? "A measured 5K assessment replaces intervals today; no additional interval session." : work + "."} Initial pace references: intervals about 8:00–8:15/mile, threshold about 8:40–9:00/mile, based on your last reported 25-minute 5K. Effort overrides pace. Threshold RPE 6–7 often corresponds to 155–165 bpm; intervals RPE 7–8 may reach 165–175 late in reps. Do not chase HR on short repetitions. Future goals of 7:00/mile and about 7:15/mile are not automatic training paces. Shorten the work if needed; keep Thursday controlled before Friday.`};
   } else if (dow === 5) {
     const f = fridays[date] ?? {vest:[0,0,0],body:[24,60,90],minutes:30};
@@ -95,13 +95,13 @@ export function revisedSession(original: Session, settings: Settings): Session {
     const vestPullSize = date === "2026-12-18" ? 1 : date === "2026-12-25" ? 2 : date === "2027-01-08" ? 3 : 5;
     const bodyPullSize = ["2026-11-20","2026-12-04"].includes(date) ? 4 : 5;
     const labels = ["pull-ups","push-ups","squats"];
-    const blocks = labels.map((label,i)=>`${label}: ${vested ? `${sets(f.vest[i],[vestPullSize,5,15][i])} with 20 lb vest, then ` : ""}${sets(f.body[i],[bodyPullSize,10,15][i])} without vest`).join("; ");
-    const loadedMiles = date === "2027-03-19" ? 1 : ["2027-03-12","2027-03-26"].includes(date) ? .75 : ["2027-02-26","2027-03-05"].includes(date) ? .5 : ["2027-01-29","2027-02-05"].includes(date) ? .25 : 0;
+    const blocks = labels.map((label,i)=>f.vest[i]+f.body[i]===0 ? `${label}: none` : `${label}: ${vested ? `${sets(f.vest[i],[vestPullSize,5,15][i])} with 20 lb vest, then ` : ""}${sets(f.body[i],[bodyPullSize,10,15][i])} without vest`).join("; ");
+    const loadedMiles = date === "2027-03-19" ? 1 : ["2027-03-12","2027-03-26","2027-04-02"].includes(date) ? .75 : ["2027-02-26","2027-03-05"].includes(date) ? .5 : ["2027-01-29","2027-02-05"].includes(date) ? .25 : 0;
     s = {...s,kind:"murph",minutes:Math.ceil(miles*11)+f.minutes,murphMinutes:f.minutes,title:taper?"Light unpartitioned technique · taper":"Friday unpartitioned Murph practice",
       detail:`${miles} running miles total: ${miles/2} before and ${miles/2} after a ${f.minutes}-minute calisthenics block including preparation and rests. Complete ALL pull-ups, then ALL push-ups, then ALL squats. Working sets × reps: ${blocks}. ${date === "2026-12-18" ? "The five vested pull-ups are STRICT singles for load assessment; bodyweight pull-ups use regular kipping." : "Pull-ups use regular kipping, never butterfly. Push-ups are clean, full range; squats reach hip crease below knee and finish standing tall."} ${vested ? `The vested dose is conditional on comfortable prior sessions${settings.vestReady ? " and your confirmed vest readiness" : "; vest readiness has not been confirmed in settings"}. If not ready, do those reps unvested or repeat a smaller prior dose.` : "No vest."} Rest 60–90 seconds for vested pulls, 45–60 for unvested pulls, 30–60 for pushes, and 20–40 for squats. Shorten rests only after the existing dose is repeatable. ${loadedMiles ? `Only if the prior loaded progression was comfortable, vest the first ${loadedMiles} mile of EACH run and do the remainder unvested.` : "Both runs are unvested and easy."} RPE 5–6 initially, 6–7 later; stop or reduce if technique fades or effort exceeds 7–8. Time is a cap: log partial work rather than rush or force all reps. Record the calisthenics block as Garmin Cardio and the runs separately. ${reserve}`};
   }
   if (taper && dow === 5) s.detail = s.detail.replace("RPE 5–6 initially, 6–7 later; stop or reduce if technique fades or effort exceeds 7–8.", "Taper effort: RPE 4–5, with at least 3 clean reps in reserve. Finish fresh; reduce reps rather than accumulate fatigue.");
-  if (date === "2027-04-12") s = {...s,kind:"run",miles:2.5,minutes:28,murphMinutes:0,startTime:undefined,title:"Easy run before the first attempt",detail:`2.5 easy miles, no strength. ${easy} Finish fresh for Tuesday's 5K.`};
+  if (date === "2027-04-16") s = {...s,detail:`2 easy miles, one before and one after up to 10 minutes light upper-body technique, including preparation and rests. No vest. Complete 3 × 2 = 6 strict pull-ups, THEN 2 × 10 = 20 clean push-ups. Rest 60–90 seconds between sets. No squats, kipping or butterfly work today. RPE at most 5, with at least 3 clean reps in reserve; skip upper body if not fully recovered. ${easy} Saturday is rest before Sunday's 5K.`};
   const inWindow = (windows: string[][]) => windows.some(([start,end])=>date>=start&&date<=end);
   const knownReentry = [...maintenance,...recovery].some(([,end])=>daysBetween(date,end)>0&&daysBetween(date,end)<=2);
   if (original.trip?.kind === "ski" || inWindow(recovery) || original.tag === "Re-entry" || (!original.trip && knownReentry)) return {...s,kind:"recovery",miles:0,minutes:25,murphMinutes:0,startTime:undefined,tag:original.tag === "Re-entry" || knownReentry ? "Re-entry" : "Recovery block",title:"Recovery · walking and mobility",detail:"20–30 minutes gentle walking and mobility. Other leg loading replaces running and squat work during this recovery block. Resume gradually when recovered; no make-up sessions."};

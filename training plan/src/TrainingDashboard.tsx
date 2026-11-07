@@ -653,9 +653,9 @@ export default function TrainingDashboard() {
               unpartitioned Murph practice. Saturday is rest. Morning durations
               include rests and preparation; the combined mornings exceed 50
               minutes. Reduced weeks and readiness checks govern progression.
-              Full weeks stay at 30–32 miles through March 29, followed by a
-              two-week taper starting March 30. Attempts begin April 13, four
-              weeks before your birthday, with Murph last on May 4.
+              Full weeks stay at 30–32 miles through April 3, followed by a
+              two-week taper starting April 4. The four Sunday slots are
+              April 18, April 25, May 2 (flexible), and May 9 (Murph).
             </p>
             <div className={styles.phases}>
               {PHASES.map((p, i) => (
