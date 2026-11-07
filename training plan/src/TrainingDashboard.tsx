@@ -3,6 +3,7 @@
 import {
   Fragment,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -122,6 +123,15 @@ export default function TrainingDashboard() {
   const [ready, setReady] = useState(false);
   const [cloud, setCloud] = useState(false);
   const [weights, setWeights] = useState<WeightMeasurement[]>([]);
+  const weightsByDate = useMemo(() => {
+    const days = new Map<string, WeightMeasurement[]>();
+    for (const measurement of [...weights].sort((a, b) => a.measuredAt.localeCompare(b.measuredAt))) {
+      const entries = days.get(measurement.date) ?? [];
+      entries.push(measurement);
+      days.set(measurement.date, entries);
+    }
+    return days;
+  }, [weights]);
   const [syncMessage, setSyncMessage] = useState("Public workout history. Open your personal editing link to publish logs and corrections.");
   const [syncBusy, setSyncBusy] = useState(false);
   const dataRef = useRef(data);
@@ -337,7 +347,8 @@ export default function TrainingDashboard() {
   const focusDate =
     today < START ? START : today >= BIRTHDAY ? "2027-05-10" : today;
   const session = sessionFor(focusDate, data.trips, data.settings);
-  const earliest = data.logs.reduce((date,l)=>l.date < date ? l.date : date, START);
+  const earliestLog = data.logs.reduce((date,l)=>l.date < date ? l.date : date, START);
+  const earliest = weights.reduce((date,w)=>w.date < date ? w.date : date, earliestLog);
   const calendarStart = sunday(addDays(earliest < today ? earliest : today, -28));
   const calendarEnd = addDays(sunday(BIRTHDAY > today ? BIRTHDAY : today), 41);
   const calendarWeeks = Array.from({length:Math.ceil((dayDiff(calendarEnd,calendarStart)+1)/7)},(_,w)=>
@@ -545,13 +556,18 @@ export default function TrainingDashboard() {
                         const logs=data.logs.filter(l=>l.date===s.date);
                         const matched=logs.some(l=>l.garminIds?.length);
                         const forecast=weather.find(f=>f.date===s.date);
+                        const weighIns=weightsByDate.get(s.date) ?? [];
                         return <button key={s.date} type="button" data-week={index===0?s.date:undefined} onClick={()=>openDetails(s)}
                           className={`${styles.calendarCell} ${s.date<today?styles.calendarPast:""} ${s.date===today?styles.calendarToday:""}`}
-                          aria-label={`${displayDate(s.date,{weekday:"long",month:"long",day:"numeric"})}: ${s.title}${matched?", Garmin workout matched":""}`}>
+                          aria-label={`${displayDate(s.date,{weekday:"long",month:"long",day:"numeric"})}: ${s.title}${matched?", Garmin workout matched":""}${weighIns.length?`, recorded Garmin weight: ${weighIns.map(w=>`${w.pounds.toFixed(1)} pounds`).join(", ")}`:""}`}>
                           <span className={styles.cellDate}><span className={styles.desktopOnly}>{displayDate(s.date,{month:"short",day:"numeric"})}</span><span className={styles.mobileOnly}>{displayDate(s.date,{day:"numeric"})}<small className={styles.mobileMonth}>{displayDate(s.date,{month:"short"})}</small></span>{s.date===today && <small className={styles.desktopOnly}>Today</small>}</span>
                           <span className={`${styles.cellType} ${s.attempt?styles.cellAttempt:""}`}>{s.attempt?"Attempt":s.trip?"Travel":s.kind}</span>
                           <strong className={styles.desktopOnly}>{s.title}</strong><strong className={styles.mobileOnly}>{compactTitle(s)}</strong>
                           {s.minutes>0 && <span><span className={styles.desktopOnly}>{s.miles>0?`${Number(s.miles.toFixed(1))} mi · `:""}~{s.minutes} min</span><span className={styles.mobileOnly}>{s.miles>0?`${Number(s.miles.toFixed(1))}mi`:`${s.minutes}m`}</span></span>}
+                          {weighIns.length>0 && <span className={styles.cellWeight} title="Recorded Garmin weigh-ins; tap for measurement times">
+                            <span className={styles.desktopOnly}>Recorded weight</span>
+                            {weighIns.map(w=><span key={w.id}>{w.pounds.toFixed(1)} lb</span>)}
+                          </span>}
                           {forecast && <span className={styles.cellWeather} title="Hourly forecast nearest your workout start">
                             <span className={styles.desktopOnly}>{forecast.time} · {forecast.tempF===null?"Temp unavailable":`${Math.round(forecast.tempF)}°F`}<br/>☂ {forecast.rain===null?"Rain chance unavailable":`${Math.round(forecast.rain)}% rain chance`}</span>
                             <span className={styles.mobileOnly}>{forecast.tempF===null?"—":`${Math.round(forecast.tempF)}°`}<br/>☂{forecast.rain===null?"—":`${Math.round(forecast.rain)}%`}</span>
@@ -573,7 +589,7 @@ export default function TrainingDashboard() {
                 </div>
               </div>
               <p className={styles.formHelp}>{weatherMessage} <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a></p>
-              <p className={styles.formHelp}>Scroll up for past weeks. Tap a day for workout details and logging. On small screens, tap a day for full details. Easy+ includes strength; Ints means intervals. Weather is °F and rain chance.</p>
+              <p className={styles.formHelp}>Scroll up for past weeks. Tap a day for workout details, weigh-in times, and logging. Daily weights are recorded Garmin measurements in lb; days without a weigh-in stay blank. Easy+ includes strength; Ints means intervals. Weather is °F and rain chance.</p>
             </section>
           </>
         )}
@@ -1122,6 +1138,10 @@ export default function TrainingDashboard() {
           <div className={styles.workoutDetails}>
             <dl><dt>Start / time</dt><dd>{data.settings.morning} · approximately {selected.minutes} minutes{sMiles(selected)}</dd>
             <dt>Goal</dt><dd>{selected.goal}</dd><dt>Effort / RPE</dt><dd>{selected.rpe}</dd><dt>Heart rate</dt><dd>{selected.heartRate}</dd></dl>
+            {!!weightsByDate.get(selected.date)?.length && <section className={styles.recordedWeights} aria-label="Recorded Garmin weigh-ins">
+              <h3>Recorded weight · Garmin</h3>
+              {weightsByDate.get(selected.date)!.map(w=><p key={w.id}><strong>{w.pounds.toFixed(1)} lb</strong>{" · "}<time dateTime={w.measuredAt}>{new Date(w.measuredAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York",timeZoneName:"short"})}</time></p>)}
+            </section>}
             <h3>What to do</h3><p>{selected.detail}</p>
             <h3>Your record</h3>
             {data.logs.filter(l=>l.date===selected.date).map(l=><button type="button" key={l.id} className={styles.loggedButton} onClick={()=>openLog(selected,l)}>{l.title}{l.garmin?.length ? ` · Garmin (${[...new Set(l.garmin.map(a=>a.device))].join(", ")})` : ""} · {l.minutes ? secondsLabel(l.minutes) : "No time"} · {l.miles.toFixed(2)} mi · {l.rpe ? `RPE ${l.rpe}` : "RPE not logged"} · Edit</button>)}
