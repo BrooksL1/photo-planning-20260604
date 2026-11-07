@@ -54,6 +54,8 @@ function compactTitle(s: Session) {
 function sMiles(s: Session) { return s.miles ? ` · ${s.miles} planned miles` : ""; }
 
 const STORAGE_KEY = "brooksl.training.v1";
+const CALENDAR_START = "2026-11-01";
+const CALENDAR_END = "2027-05-15";
 type Data = {
   version: 1;
   logs: Workout[];
@@ -151,7 +153,7 @@ export default function TrainingDashboard() {
     "week",
   );
   const [detailOnly, setDetailOnly] = useState(false);
-  const [calendarFocus, setCalendarFocus] = useState(START);
+  const [calendarFocus, setCalendarFocus] = useState(CALENDAR_START);
   const calendarRef = useRef<HTMLDivElement>(null);
   const {weather, message:weatherMessage} = useMorningWeather(data.settings.morning);
   const [selected, setSelected] = useState<Session | null>(null);
@@ -351,21 +353,18 @@ export default function TrainingDashboard() {
   const focusDate =
     today < START ? START : today >= BIRTHDAY ? "2027-05-10" : today;
   const session = sessionFor(focusDate, data.trips, data.settings);
-  const earliestLog = data.logs.reduce((date,l)=>l.date < date ? l.date : date, START);
-  const earliest = weights.reduce((date,w)=>w.date < date ? w.date : date, earliestLog);
-  const calendarStart = sunday(addDays(earliest < today ? earliest : today, -28));
-  const calendarEnd = addDays(sunday(BIRTHDAY > today ? BIRTHDAY : today), 41);
-  const calendarWeeks = Array.from({length:Math.ceil((dayDiff(calendarEnd,calendarStart)+1)/7)},(_,w)=>
-    Array.from({length:7},(_,d)=>sessionFor(addDays(calendarStart,w*7+d),data.trips,data.settings)));
+  const calendarWeeks = Array.from({length:Math.ceil((dayDiff(CALENDAR_END,CALENDAR_START)+1)/7)},(_,w)=>
+    Array.from({length:7},(_,d)=>sessionFor(addDays(CALENDAR_START,w*7+d),data.trips,data.settings)));
   function scrollToDate(date: string) {
+    const visibleDate = date < CALENDAR_START ? CALENDAR_START : date > CALENDAR_END ? CALENDAR_END : date;
     const container = calendarRef.current;
-    const row = container?.querySelector<HTMLElement>(`[data-week="${sunday(date)}"]`);
+    const row = container?.querySelector<HTMLElement>(`[data-week="${sunday(visibleDate)}"]`);
     const header = container?.querySelector<HTMLElement>("[data-calendar-header]");
     if(container && row) container.scrollTop = row.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - (header?.offsetHeight ?? 0) - 6;
   }
   useEffect(()=>{
     if(ready && tab==="week") scrollToDate(calendarFocus);
-  },[ready,tab,calendarFocus,calendarStart,data.trips]);
+  },[ready,tab,calendarFocus,data.trips]);
   function openDetails(s: Session) { setEditing(null); setDetailOnly(true); setSelected(s); }
 
   const results = goalResults(data.logs);
@@ -602,7 +601,7 @@ export default function TrainingDashboard() {
                 </div>
               </div>
               <p className={styles.formHelp}>{weatherMessage} <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Weather: Open-Meteo</a></p>
-              <p className={styles.formHelp}>Weekly cell: logged / target miles, Murph minutes, and average / target lb. Cardio counts as Murph time; log runs separately or enter a manual time split. Current week is so far; zero means nothing logged. Results start Oct 25. Future weeks show targets. Tap a day for details and logging.</p>
+              <p className={styles.formHelp}>Nov 1, 2026–May 15, 2027. Weekly cell: logged / target miles, Murph minutes, and average / target lb. Cardio counts as Murph time; log runs separately or enter a manual time split. Current week is so far; zero means nothing logged. Future weeks show targets. Tap a day for details and logging.</p>
             </section>
           </>
         )}
