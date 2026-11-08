@@ -59,7 +59,7 @@ test("date math stays calendar-correct over DST and year boundaries", () => {
   assert.equal(monday("2027-03-14"), "2027-03-08");
   assert.equal(monday("2027-03-15"), "2027-03-15");
 });
-test("travel reduces load, respects inclusive end dates, and returns gently", () => {
+test("travel adapts sessions without automatic recovery days; skiing returns gently", () => {
   const trips = [
     {
       id: "trip",
@@ -70,10 +70,10 @@ test("travel reduces load, respects inclusive end dates, and returns gently", ()
       tentative: false,
     },
   ];
-  assert.equal(sessionFor("2026-12-13", trips).miles, 3);
+  assert.equal(sessionFor("2026-12-13", trips).miles, 6);
   assert.equal(sessionFor("2026-12-12", trips).kind, "rest");
-  assert.equal(sessionFor("2026-12-14", trips).kind, "recovery");
-  assert.equal(sessionFor("2026-12-15", trips).tag, "Re-entry");
+  assert.equal(sessionFor("2026-12-14", trips).kind, "run");
+  assert.notEqual(sessionFor("2026-12-15", trips).tag, "Re-entry");
   const ski = [{ ...trips[0], kind: "ski" }];
   assert.equal(sessionFor("2026-12-11", ski).miles, 0);
   assert.equal(sessionFor("2026-12-11", ski).murphMinutes, 0);
@@ -196,7 +196,7 @@ test("hybrid week redistributes miles across five runs and three strength exposu
  assert.match(week[3].rpe,/3–4/);
  assert.ok(week.every(s=>s.goal && s.rpe && s.heartRate));
  const cutback=sessionFor("2026-12-17");
- assert.match(cutback.title,/reduced/); assert.match(cutback.rpe,/3–4/);
+ assert.match(cutback.title,/threshold/); assert.match(cutback.rpe,/6–7/);
 });
 
 test("historical weekdays keep their original cap; revised combined mornings allow longer",()=>{

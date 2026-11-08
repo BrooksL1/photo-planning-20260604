@@ -643,7 +643,7 @@ export default function TrainingDashboard() {
               </button>
             </div>
             <p className={styles.sectionCopy}>
-              Revised November 7 from your reported 192.5 lb, 25-minute 5K,
+              Updated November 8 from your reported 192.5 lb, 25-minute 5K,
               7 strict pull-ups, 12 regular kipping pull-ups, and 35 clean push-ups.
               Full weeks build toward 32 running miles: 10 Sunday, 4.5 Monday
               and Wednesday, 5.5 Tuesday and Thursday, and 2 Friday. Monday
@@ -651,8 +651,10 @@ export default function TrainingDashboard() {
               Tuesday has intervals, Thursday threshold, and Friday the main
               unpartitioned Murph practice. Saturday is rest. Morning durations
               include rests and preparation; the combined mornings exceed 50
-              minutes. Reduced weeks and readiness checks govern progression.
-              Full weeks stay at 30–32 miles through April 3, followed by a
+              minutes. Travel uses shorter sessions where needed; there are no
+              automatic two-day recovery breaks after routine trips or fixed
+              every-fourth-week cutbacks. After skiing, rebuild through 24 and
+              28 miles before full 30–32-mile weeks through April 3, followed by a
               two-week taper starting April 4. The four Sunday slots are
               April 18, April 25, May 2 (flexible), and May 9 (Murph).
             </p>

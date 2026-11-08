@@ -1,4 +1,4 @@
-import { revisedSession, REVISED_START } from "./revisedPlan";
+import { revisedSession, REVISED_START, SMOOTH_START } from "./revisedPlan";
 import { ATTEMPTS, BIRTHDAY, CHALLENGE_START, TAPER_START } from "./challenge";
 export { ATTEMPTS, BIRTHDAY, CHALLENGE_START, FLEX_DATE, TAPER_START } from "./challenge";
 
@@ -95,7 +95,7 @@ export const PHASES: Phase[] = [
     start: "2026-11-23",
     end: "2027-01-03",
     focus:
-      "Build repeatable, nonfailure upper-body work on Monday and Wednesday. Tuesday intervals and Thursday threshold stay controlled; Friday progresses sequential pull-ups, push-ups, and squats. Holiday weeks become maintenance.",
+      "Build repeatable, nonfailure upper-body work on Monday and Wednesday. Tuesday intervals and Thursday threshold stay controlled; Friday progresses sequential pull-ups, push-ups, and squats. Travel uses shorter running and floor-only work as needed, without an automatic two-day recovery penalty afterward. No extra December cutback is layered onto travel reductions.",
     checkpoint:
       "A controlled 20-minute tempo and 18–24 pull-ups, then 36–48 push-ups, then 54–72 squats, with no lingering soreness.",
   },
@@ -104,7 +104,7 @@ export const PHASES: Phase[] = [
     start: "2027-01-04",
     end: "2027-02-14",
     focus:
-      "Build toward 40–60 pull-ups, 80–120 push-ups, and 120–180 squats in sequential blocks. Ski weeks replace leg loading. Practice each movement in sequence, using small sets. A vest is optional only after the readiness check; keep it light and short.",
+      "Build toward 40–60 pull-ups, 80–120 push-ups, and 120–180 squats in sequential blocks. Ski weeks replace running and squat work; return first with short easy runs, then rebuild mileage and quality. Routine travel does not require walking-only days afterward. A vest is conditional on repeatable prior work and normal recovery.",
     checkpoint:
       "8–10 fresh strict pull-ups; 50 pull-ups, then 100 push-ups, then 150 squats without a vest, broken into small sets. If not ready, repeat the earlier volume.",
   },
@@ -113,7 +113,7 @@ export const PHASES: Phase[] = [
     start: "2027-02-15",
     end: "2027-04-03",
     focus:
-      "Sustain 30–32 running miles in full weeks through April 3. Progress Friday unpartitioned rehearsals only after comfortable prior doses. Thursday threshold gets shorter for the biggest rehearsals; Sunday drops to eight miles. Monday/Wednesday include a 30-minute upper-body block before running. Keep most running conversational; travel, re-entry, and recovery still reduce load.",
+      "Return from reduced running with weeks of 12, 24, 28, then 32 miles from February 14 through March 13. Full weeks thereafter hold 30–32 miles through April 3. Progress Friday unpartitioned rehearsals only after comfortable prior doses; the largest dose moves to March 26. Thursday threshold gets shorter for the biggest rehearsals, followed by eight-mile Sundays. Reduce individual sessions when recovery warrants it, without an automatic every-fourth-week cutback.",
     checkpoint:
       "For 5K: 3 × 1 km near 7:00/mile, 2 min jog. For 10K: 3 × 2 km near 7:15/mile, 2 min jog. These are readiness clues, not guarantees.",
   },
@@ -131,7 +131,7 @@ export const PHASES: Phase[] = [
     start: CHALLENGE_START,
     end: "2027-05-10",
     focus:
-      "Sunday April 18: 5K. April 25: 10K. May 2: recovery/maintenance, with an optional running retry only when recovered. May 9: vested unpartitioned Murph. Sunday attempts replace the long run and weekday hard sessions. Mondays support recovery, and Saturdays remain rest. Reduce calisthenics during the final 7–10 days before Murph.",
+      "Sunday April 18: 5K. April 25: 10K. May 2: easy running or an optional running retry. May 9: vested unpartitioned Murph. Keep approximately 22 and 23 miles during the first two attempt weeks, including two easy preparation/cooldown miles per running attempt, then 19 miles in the final Murph taper week. Attempts replace other hard running; Mondays support recovery and Saturdays remain rest.",
     checkpoint:
       "A goal attempt is optional if readiness is missing. Log a scaled or controlled effort and carry the goal forward.",
   },
@@ -377,6 +377,7 @@ function buildSession(
     s.kind !== "rest" &&
     trips.some(
       (t) =>
+        (date < SMOOTH_START || t.kind === "ski") &&
         dayDiff(date, t.end) > 0 &&
         dayDiff(date, t.end) <= 2 &&
         (!t.tentative || settings.includeTentative),
@@ -406,8 +407,8 @@ export function sessionFor(date: string, trips: Trip[] = [], settings: Settings 
   const combined = s.kind === "run" && (s.murphMinutes ?? 0) > 0;
   const strength = s.kind === "strength" || s.kind === "murph";
   const recovery = s.kind === "recovery" || s.kind === "rest";
-  const light = !s.attempt && (s.tag === "Taper" || s.tag === "Challenge maintenance");
-  const effort = s.tag === "Flexible week" ? "Default easy run: 3–4 / 10. An optional, recovered running retry replaces it at 8–9." : s.tag === "Murph maintenance" ? "Calisthenics: 5–6 / 10, with 2–3 clean reps in reserve. Runs: 3–4." : light && (strength || combined) ? "Run: 3–4 / 10. Light calisthenics: at most 5, with at least 3 clean reps in reserve." : light && quality ? "Short intervals: 7 / 10; short threshold: 6. All other running: 3–4." : undefined;
+  const light = !s.attempt && ["Taper","Challenge maintenance","Gradual return","Travel adjusted"].includes(s.tag);
+  const effort = /assessment/i.test(s.title) ? "Measured 5K: 8–9 / 10 only when fully recovered; otherwise use a controlled 6–7 effort. Easy warm-up/cooldown: 3–4. This replaces intervals." : s.tag === "Flexible week" ? "Default easy run: 3–4 / 10. An optional, recovered running retry replaces it at 8–9." : s.tag === "Murph maintenance" || s.tag === "Travel adjusted" && (strength || combined) ? "Calisthenics: 5–6 / 10, with 2–3 clean reps in reserve. Runs: 3–4." : light && (strength || combined) ? "Run: 3–4 / 10. Light calisthenics: at most 5, with at least 3 clean reps in reserve." : light && quality ? "Short intervals: 7 / 10; short threshold: 6. All other running: 3–4." : undefined;
   return { ...s,
     goal: s.attempt ? `Assess ${s.attempt} progress; attempts replace hard training.` : recovery ? "Restore readiness and absorb training." : quality ? "Improve running fitness through controlled, repeatable work." : strength ? "Build clean repeated sets for unpartitioned Murph." : combined ? "Build aerobic fitness and pulling/pushing strength without exhausting either." : "Build aerobic endurance while preserving recovery.",
     rpe: effort ?? (s.attempt ? "8–9 for a ready, deliberate attempt; scale if not ready." : recovery ? "1–2 / 10" : quality ? "Intervals: 7–8 / 10; threshold: 6–7. Warm-up and recovery: 2–4." : strength ? "Murph work: 5–6 initially, later 6–7; leave 2–3 clean reps in reserve. Runs stay easy at 3–4." : combined ? "Run: 3–4 / 10. Upper body: sets at most 7, with 2–3 clean reps in reserve." : "3–4 / 10; comfortable full sentences."),
