@@ -15,7 +15,7 @@ test("approved full week totals 32 miles with two quality runs and upper-body-fi
  assert.match(sessions[1].detail,/5:30–6:00/);
  assert.equal(sessions[1].startTime,"05:30");
  assert.match(sessions[1].detail,/6 × 3 = 18 strict/);
- assert.match(sessions[3].detail,/6 × 4 = 24 regular kipping/);
+ assert.match(sessions[3].detail,/5 × 4 = 20 regular kipping/);
  assert.match(sessions[2].title,/intervals/);
  assert.match(sessions[4].title,/threshold/);
  assert.equal(sessions[5].kind,"murph");
@@ -76,7 +76,7 @@ test("flex Sunday is optional and the final Murph taper removes substantial cali
  assert.equal(sessionFor("2027-05-03").kind,"recovery");
  assert.equal(sessionFor("2027-04-11").miles,4);
  assert.equal(sessionFor("2027-04-28").murphMinutes,40);
- assert.match(sessionFor("2027-04-28").detail,/ALL 50 regular kipping pull-ups \(10 × 5\)/);
+ assert.match(sessionFor("2027-04-28").detail,/ALL 50 regular kipping pull-ups \(up to 10 × 5/);
  for (let d="2027-04-29";d<"2027-05-09";d=addDays(d,1)) {
   const s=sessionFor(d);
   assert.ok((s.murphMinutes??0)<=10,d);
@@ -171,8 +171,8 @@ test("post-ski running and vested work rebuild before peak practice",()=>{
  for(const d of ["2027-02-16","2027-02-17"]){const s=sessionFor(d);assert.equal(s.miles,3);assert.match(s.detail,/No intervals, threshold or squats/);}
  assert.equal(sessionFor("2027-02-23").title,"Tuesday intervals");
  assert.equal(sessionFor("2027-03-02").title,"Measured 5K assessment");
- assert.match(sessionFor("2027-02-26").detail,/5 × 5 = 25 with 20 lb vest/);
- assert.match(sessionFor("2027-03-05").detail,/7 × 5 = 35 with 20 lb vest/);
+ assert.match(sessionFor("2027-02-26").detail,/8 × 3 \+ 1 × 1 = 25 with 20 lb vest/);
+ assert.match(sessionFor("2027-03-05").detail,/11 × 3 \+ 1 × 2 = 35 with 20 lb vest/);
  assert.match(sessionFor("2027-03-26").detail,/16 × 5 = 80 with 20 lb vest/);
  assert.equal(sessionFor("2027-03-28").miles,8);
 });

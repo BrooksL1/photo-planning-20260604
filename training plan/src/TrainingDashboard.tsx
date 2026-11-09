@@ -37,6 +37,7 @@ import { validWeights, type WeightMeasurement } from "./weight";
 import { weeklySummary } from "./weeklySummary";
 import { useMorningWeather } from "./useMorningWeather";
 import { mergeGarmin, validActivities } from "./garmin";
+import { importAdvanced, mergePublicHistory } from "./historyRefresh";
 
 function compactTitle(s: Session) {
   if (s.attempt) return s.attempt;
@@ -140,6 +141,9 @@ export default function TrainingDashboard() {
   }, [weights]);
   const [syncMessage, setSyncMessage] = useState("Public workout history. Open your personal editing link to publish logs and corrections.");
   const [syncBusy, setSyncBusy] = useState(false);
+  const [requestBusy, setRequestBusy] = useState(false);
+  const [refreshStatus, setRefreshStatus] = useState("");
+  const [pendingRefresh, setPendingRefresh] = useState<{syncedAt: string | null; weightSyncedAt: string | null; started: number} | null>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
   const cloudRef = useRef(false);
@@ -215,7 +219,7 @@ export default function TrainingDashboard() {
         if(!validateLogs(history.logs) || !validWeights(history.weights??[])) throw new Error("Public history could not be read.");
         setWeights(history.weights??[]);
         const local=dataRef.current;
-        const logs=[...new Map([...history.logs,...local.logs].map((l:Workout)=>[l.id,l])).values()];
+        const logs=mergePublicHistory(local.logs,history.logs);
         const next={...local,logs};dataRef.current=next;setData(next);
         setSyncMessage(`Public history${history.syncedAt ? ` · Garmin imported ${new Date(history.syncedAt).toLocaleString()}` : ""}. Open your personal editing link to publish changes. Local logs stay on this device until unlocked.`);return;
       }
@@ -241,6 +245,54 @@ export default function TrainingDashboard() {
     } catch(error) {setSyncMessage(error instanceof Error?error.message:"Sync unavailable.");}
     finally {refreshing.current=false;setSyncBusy(false);}
   }
+  async function requestFreshGarmin() {
+    if (requestBusy || pendingRefresh) return;
+    setRequestBusy(true);
+    setRefreshStatus("Requesting a fresh Garmin import…");
+    try {
+      const response = await fetch("/api/training/refresh", {method:"POST"});
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not request a refresh.");
+      setPendingRefresh({syncedAt:result.syncedAt,weightSyncedAt:result.weightSyncedAt,started:Date.now()});
+      setRefreshStatus("Garmin refresh requested. Waiting for activities and weight; this can take several minutes. T3 and the Garmin connection must be online.");
+    } catch (error) {setRefreshStatus(error instanceof Error ? error.message : "Could not request a refresh.");}
+    finally {setRequestBusy(false);}
+  }
+  useEffect(() => {
+    if (!pendingRefresh) return;
+    const controller = new AbortController();
+    let active = false, activitiesUpdated = false, weightUpdated = false;
+    const timer = window.setInterval(() => {
+      if (active) return;
+      active = true;
+      void (async () => {
+        try {
+          const response = await fetch("/api/training/history", {cache:"no-store",signal:controller.signal});
+          if (!response.ok) throw new Error("History unavailable");
+          const result = await response.json();
+          activitiesUpdated = importAdvanced(result.syncedAt,pendingRefresh.syncedAt);
+          weightUpdated = importAdvanced(result.weightSyncedAt,pendingRefresh.weightSyncedAt);
+          if (activitiesUpdated || weightUpdated) await refreshCloud();
+          if (controller.signal.aborted) return;
+          if (activitiesUpdated && weightUpdated) {
+            setRefreshStatus("Activities and weight refreshed from Garmin. No new records is also a successful refresh.");
+            setPendingRefresh(null);
+          } else if (Date.now() - pendingRefresh.started > 10 * 60 * 1000) {
+            setRefreshStatus(activitiesUpdated ? "Activities refreshed; weight has not refreshed yet. Existing weigh-ins are kept. You can request another refresh." : weightUpdated ? "Weight refreshed; activities have not refreshed yet. You can request another refresh." : "The refresh has not completed yet. Check T3 and the Garmin connection, or try again. Existing history is kept.");
+            setPendingRefresh(null);
+          }
+        } catch {
+          if (!controller.signal.aborted && Date.now() - pendingRefresh.started > 10 * 60 * 1000) {
+            setRefreshStatus("Could not confirm the Garmin refresh. Existing history is kept; you can try again.");
+            setPendingRefresh(null);
+          }
+        } finally {active = false;}
+      })();
+    }, 10000);
+    return () => {controller.abort();window.clearInterval(timer);};
+    // Poll only while an explicit request is pending.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRefresh]);
   useEffect(()=>{
     if(!ready) return;
     void (async()=>{
@@ -543,9 +595,11 @@ export default function TrainingDashboard() {
                   <h2>Calendar</h2>
                 </div>
                 <div className={styles.weekNav}>
+                  <button onClick={()=>void requestFreshGarmin()} disabled={requestBusy || !!pendingRefresh || syncBusy} aria-busy={requestBusy || !!pendingRefresh}>{requestBusy || pendingRefresh ? "Refreshing Garmin…" : "Refresh weight and activities"}</button>
                   <button onClick={() => {setCalendarFocus(today);scrollToDate(today);}}>Today</button>
                 </div>
               </div>
+              {refreshStatus && <p className={styles.refreshStatus} role="status">{refreshStatus}</p>}
               <div className={styles.calendarScroll} ref={calendarRef} tabIndex={0} aria-label="Scrollable training calendar">
                 <div className={styles.calendarGrid} aria-label="Weekly workout calendar">
                   <div className={styles.calendarHeader} data-calendar-header>

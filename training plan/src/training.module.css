@@ -1348,6 +1348,9 @@
 .weekSection { margin-top: 0; }
 .weekSection .sectionHeading { margin-bottom: 8px; }
 .weekSection .sectionHeading h2 { font-size: 20px; }
+.weekNav { flex-wrap: wrap; justify-content: flex-end; }
+.refreshStatus { margin: 0 0 8px; font-size: 13px; color: #475569; }
+.weekNav button:disabled { opacity: .6; cursor: wait; }
 .calendarScroll { margin-top: 8px; }
 .syncDetails { margin: 18px 0; padding: 12px 0; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 .syncDetails summary { cursor: pointer; }
