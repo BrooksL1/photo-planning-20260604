@@ -262,6 +262,7 @@ export default function TrainingDashboard() {
     if (!pendingRefresh) return;
     const controller = new AbortController();
     let active = false, activitiesUpdated = false, weightUpdated = false;
+    let activitiesLoaded = false, weightLoaded = false;
     const timer = window.setInterval(() => {
       if (active) return;
       active = true;
@@ -272,7 +273,11 @@ export default function TrainingDashboard() {
           const result = await response.json();
           activitiesUpdated = importAdvanced(result.syncedAt,pendingRefresh.syncedAt);
           weightUpdated = importAdvanced(result.weightSyncedAt,pendingRefresh.weightSyncedAt);
-          if (activitiesUpdated || weightUpdated) await refreshCloud();
+          if (activitiesUpdated && !activitiesLoaded || weightUpdated && !weightLoaded) {
+            await refreshCloud();
+            activitiesLoaded = activitiesUpdated;
+            weightLoaded = weightUpdated;
+          }
           if (controller.signal.aborted) return;
           if (activitiesUpdated && weightUpdated) {
             setRefreshStatus("Activities and weight refreshed from Garmin. No new records is also a successful refresh.");

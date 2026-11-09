@@ -30,7 +30,7 @@ const fridays: Record<string, Friday> = {
 };
 const sets = (total: number, size: number) => `${Math.floor(total / size)} × ${size}${total % size ? ` + 1 × ${total % size}` : ""} = ${total}`;
 const easy = "RPE 3–4, around 135–145 bpm with full-sentence conversation. Slow or walk hills if effort rises; 155 bpm at RPE 6 is too hard for an easy run.";
-const baseline = "November 9 baseline: pull-up sets 7/4/3/3/4 with 90-second rests (21 total; last set to failure), and push-up sets 15/15/15/15/10 with 60-second rests (70 total; near failure). Pull-ups provisionally treated as strict and unvested pending confirmation. These are demanding test totals, not repeatable working-set targets. Keep working effort around RPE 6–7; HR is not a calisthenics rep target. Rest until breathing settles and rep quality returns. ";
+const baseline = "November 9 baseline: strict unvested pull-up sets 7/4/3/3/4 with 90-second rests (21 total; last set to failure), and push-up sets 15/15/15/15/10 with 60-second rests (70 total; near failure). These are demanding test totals, not repeatable working-set targets. Keep working effort around RPE 6–7; HR is not a calisthenics rep target. Rest until breathing settles and rep quality returns. ";
 const reserve = "Keep at least 2–3 clean reps in reserve. Advance only after two comfortable exposures with normal recovery. Otherwise repeat or reduce the previous dose. Reps use full range: chin above the bar and full elbow extension; chest to floor, straight body, full push-up lockout.";
 const returnMiles: Record<string, number> = {
   "2027-01-17":6, "2027-01-18":3.5, "2027-01-19":4.5, "2027-01-20":4,

@@ -105,7 +105,7 @@ test("a travel conflict cannot silently remain a challenge attempt", () => {
 test("unpartitioned Murph is the default and its aftermath replaces harder sessions", () => {
   assert.equal(DEFAULT_SETTINGS.partition, "unpartitioned");
   assert.equal(sessionFor("2027-03-05").kind,"murph");
-  assert.match(sessionFor("2027-03-05").detail, /ALL pull-ups, then ALL push-ups, then ALL squats/);
+  assert.match(sessionFor("2027-03-05").detail, /pull-up block, then the push-up block, then the squat block/);
   assert.match(sessionFor("2027-05-09").detail, /all 100 regular kipping pull-ups/);
   assert.equal(sessionFor("2027-05-10").kind, "recovery");
   for (const d of ["2027-05-11", "2027-05-12"])
