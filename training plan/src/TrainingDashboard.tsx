@@ -11,7 +11,7 @@ import {
 } from "react";
 import {
   ATTEMPTS,
-  FLEX_DATE,
+  REATTEMPT_DATES,
   BIRTHDAY,
   DEFAULT_SETTINGS,
   MILES_5K,
@@ -42,7 +42,7 @@ import { importAdvanced, mergePublicHistory } from "./historyRefresh";
 function compactTitle(s: Session) {
   if (s.attempt) return s.attempt;
   if (s.trip) return "Away";
-  if (s.date === FLEX_DATE) return "Flex";
+  if (REATTEMPT_DATES.some(d=>d===s.date)) return "Retry";
   if (/tempo/i.test(s.title)) return "Tempo";
   if (/interval/i.test(s.title)) return "Ints";
   if (/threshold/i.test(s.title)) return "Thresh";
@@ -653,6 +653,10 @@ export default function TrainingDashboard() {
                           <span>{summary.showResults ? "Avg lb" : "Weight lb"}</span>
                           <strong>{summary.showResults && <>{summary.weightAverage?.toFixed(1)??"—"}<span className={styles.summaryDivider}> / </span></>}{summary.weightTarget??"—"}</strong>
                         </div>
+                        <div className={styles.summaryMetric} title={`Counted from ${displayDate(summary.end,{month:"long",day:"numeric"})}, the last day of this week, to your May 11 birthday.`}>
+                          <span>To May 11</span>
+                          <strong>{summary.daysLeft}<span className={styles.summaryUnit}> days</span><span className={styles.summaryDivider}> · </span>{format(summary.weeksLeft)}<span className={styles.summaryUnit}> wks</span></strong>
+                        </div>
                         {summary.showResults && <small className={styles.summaryWeighIns}>{summary.weighIns} weigh-in{summary.weighIns===1?"":"s"}</small>}
                       </div>
                     </Fragment>;
@@ -707,15 +711,17 @@ export default function TrainingDashboard() {
               Full weeks build toward 32 running miles: 10 Sunday, 4.5 Monday
               and Wednesday, 5.5 Tuesday and Thursday, and 2 Friday. Monday
               and Wednesday upper-body work starts at 5:30 before the easy run;
-              Tuesday has intervals, Thursday threshold, and Friday the main
-              unpartitioned Murph practice. Saturday is rest. Morning durations
+              Tuesday has intervals, Thursday threshold, and Friday Murph rounds
+              (5 pull-ups, 10 push-ups, 15 squats per round, one more round
+              each week) until the vest and unpartitioned blocks begin in February. Saturday is rest. Morning durations
               include rests and preparation; the combined mornings exceed 50
               minutes. Travel uses shorter sessions where needed; there are no
               automatic two-day recovery breaks after routine trips or fixed
               every-fourth-week cutbacks. After skiing, rebuild through 24 and
-              28 miles before full 30–32-mile weeks through April 3, followed by a
-              two-week taper starting April 4. The four Sunday slots are
-              April 18, April 25, May 2 (flexible), and May 9 (Murph).
+              28 miles before full 30–32-mile weeks through March 27, followed by a
+              two-week taper starting March 28. The attempts are Murph on
+              April 11, the 5K on April 18 and the 10K on April 25, with
+              May 2 and May 9 held as reattempt days.
             </p>
             <div className={styles.phases}>
               {PHASES.map((p, i) => (
@@ -744,10 +750,10 @@ export default function TrainingDashboard() {
               ))}
             </div>
             <h3 className={styles.attemptHeading}>
-              Three goal attempts + a flexible week
+              Three goal attempts + two reattempt days
             </h3>
             <div className={styles.attempts}>
-              {[...ATTEMPTS, {date:FLEX_DATE,goal:"Recovery / optional running retry"}].sort((a,b)=>a.date.localeCompare(b.date)).map((a) => (
+              {[...ATTEMPTS, ...REATTEMPT_DATES.map(date=>({date,goal:"Reattempt · one unmet goal"}))].sort((a,b)=>a.date.localeCompare(b.date)).map((a) => (
                 <button
                   key={a.date}
                   onClick={() => {
@@ -763,7 +769,7 @@ export default function TrainingDashboard() {
                     })}
                   </span>
                   <strong>{a.goal}</strong>
-                  <small>{a.date === FLEX_DATE ? "Easy running is the default →" : "View the week →"}</small>
+                  <small>{REATTEMPT_DATES.some(d=>d===a.date) ? "Easy running if all goals are met →" : "View the week →"}</small>
                 </button>
               ))}
             </div>

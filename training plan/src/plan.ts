@@ -1,6 +1,6 @@
 import { revisedSession, REVISED_START, SMOOTH_START } from "./revisedPlan";
 import { ATTEMPTS, BIRTHDAY, CHALLENGE_START, TAPER_START } from "./challenge";
-export { ATTEMPTS, BIRTHDAY, CHALLENGE_START, FLEX_DATE, TAPER_START } from "./challenge";
+export { ATTEMPTS, BIRTHDAY, CHALLENGE_START, FLEX_DATE, REATTEMPT_DATES, TAPER_START } from "./challenge";
 
 export const START = "2026-10-27";
 export const MILES_5K = 5 / 1.609344;
@@ -86,7 +86,7 @@ export const PHASES: Phase[] = [
     start: START,
     end: "2026-11-22",
     focus:
-      "From November 7, build toward the revised 32-mile week: Monday/Wednesday upper body before easy runs, Tuesday intervals, Thursday controlled threshold, Friday Murph preparation, Saturday rest, and Sunday long. Travel and recovery reduce the workload. Easy effort is anchored around 135–145 bpm and RPE 3–4.",
+      "From November 7, build toward the revised 32-mile week: Monday/Wednesday upper body before easy runs, Tuesday intervals, Thursday controlled threshold, Friday Murph rounds, Saturday rest, and Sunday long. Travel and recovery reduce the workload. Easy effort is anchored around 135–145 bpm and RPE 3–4.",
     checkpoint:
       "Consistent pain-free mornings; 6 × 2–3 strict pull-ups with clean reps and 2 reps in reserve.",
   },
@@ -95,45 +95,45 @@ export const PHASES: Phase[] = [
     start: "2026-11-23",
     end: "2027-01-03",
     focus:
-      "Build repeatable, nonfailure upper-body work on Monday and Wednesday. Tuesday intervals and Thursday threshold stay controlled; Friday progresses sequential pull-ups, push-ups, and squats. Travel uses shorter running and floor-only work as needed, without an automatic two-day recovery penalty afterward. No extra December cutback is layered onto travel reductions.",
+      "Build repeatable, nonfailure upper-body work on Monday and Wednesday. Tuesday intervals and Thursday threshold stay controlled; Friday Murph rounds add one round of 5 pull-ups, 10 push-ups and 15 squats each week, from 10 toward 20. Travel uses shorter running and floor-only work as needed, without an automatic two-day recovery penalty afterward. No extra December cutback is layered onto travel reductions.",
     checkpoint:
-      "A controlled 20-minute tempo and 18–24 pull-ups, then 36–48 push-ups, then 54–72 squats, with no lingering soreness.",
+      "A controlled 20-minute tempo and Friday rounds climbing from 10 toward 16–17 (5 kipping pull-ups, 10 push-ups, 15 squats per round, about 2:00 early rounds and 2:30 later), with no lingering soreness.",
   },
   {
     title: "Strength into endurance",
     start: "2027-01-04",
     end: "2027-02-14",
     focus:
-      "Build toward 40–60 pull-ups, 80–120 push-ups, and 120–180 squats in sequential blocks. Ski weeks replace running and squat work; return first with short easy runs, then rebuild mileage and quality. Routine travel does not require walking-only days afterward. A vest is conditional on repeatable prior work and normal recovery.",
+      "Reach 20 unvested rounds of 5/10/15 (full partitioned Murph volume) on January 29, then convert to larger blocks with the 20 lb vest from February 5. Ski weeks replace running and squat work; return first with short easy runs, then rebuild mileage and quality. Routine travel does not require walking-only days afterward. A vest is conditional on repeatable prior work and normal recovery.",
     checkpoint:
-      "8–10 fresh strict pull-ups; 50 pull-ups, then 100 push-ups, then 150 squats without a vest, broken into small sets. If not ready, repeat the earlier volume.",
+      "8–10 fresh strict pull-ups; 20 rounds of 5/10/15 in about 48 minutes without a vest, then 50/100/150 in vested blocks. If not ready, repeat the earlier volume.",
   },
   {
     title: "Practice the demands",
     start: "2027-02-15",
-    end: "2027-04-03",
+    end: "2027-03-27",
     focus:
-      "Return from reduced running with weeks of 12, 24, 28, then 32 miles from February 14 through March 13. Full weeks thereafter hold 30–32 miles through April 3. Progress Friday unpartitioned rehearsals only after comfortable prior doses; the largest dose moves to March 26. Thursday threshold gets shorter for the biggest rehearsals, followed by eight-mile Sundays. Reduce individual sessions when recovery warrants it, without an automatic every-fourth-week cutback.",
+      "Return from reduced running with weeks of 12, 24, 28, then 32 miles from February 14 through March 13. Full weeks thereafter hold 30–32 miles through March 27. Progress Friday unpartitioned rehearsals only after comfortable prior doses; the largest dose (full 100/200/300 with the vest) is March 19, 23 days before the first Murph attempt. Thursday threshold gets shorter for the biggest rehearsals, followed by an eight-mile Sunday. Reduce individual sessions when recovery warrants it, without an automatic every-fourth-week cutback.",
     checkpoint:
       "For 5K: 3 × 1 km near 7:00/mile, 2 min jog. For 10K: 3 × 2 km near 7:15/mile, 2 min jog. These are readiness clues, not guarantees.",
   },
   {
     title: "Freshen up",
     start: TAPER_START,
-    end: "2027-04-17",
+    end: "2027-04-10",
     focus:
-      "April 4–10: 25 running miles. April 11–17: 19 miles. These taper blocks match the Sunday–Saturday calendar rows. Retain short controlled intervals and reduce upper-body work. No full Murph rehearsal or new vest load. Friday April 16 has only light unvested upper-body technique, with no squats; Saturday is rest before Sunday's 5K.",
+      "March 28–April 3: 25 running miles. April 4–10: 19 miles. These taper blocks match the Sunday–Saturday calendar rows. Retain short controlled intervals and reduce upper-body work. No full Murph rehearsal or new vest load. Friday April 9 has only light unvested upper-body technique, with no squats; Saturday is rest before Sunday's Murph attempt.",
     checkpoint:
       "Normal sleep and easy-run effort, no joint pain, and recovered from the last strength session.",
   },
   {
-    title: "Four Sundays. Three goals.",
+    title: "Three goals, two reattempts",
     start: CHALLENGE_START,
     end: "2027-05-10",
     focus:
-      "Sunday April 18: 5K. April 25: 10K. May 2: easy running or an optional running retry. May 9: vested unpartitioned Murph. Keep approximately 22 and 23 miles during the first two attempt weeks, including two easy preparation/cooldown miles per running attempt, then 19 miles in the final Murph taper week. Attempts replace other hard running; Mondays support recovery and Saturdays remain rest.",
+      "Sunday April 11: Murph attempt 1 (20 lb vest, target 57:00). April 18: 5K. April 25: 10K. May 2 and May 9 are open reattempt days for any goal still unmet, one goal per day. Keep easy running between attempts, with walking only for the three days after Murph and the day after each other attempt. Attempts replace other hard running; Mondays support recovery and Saturdays remain rest.",
     checkpoint:
-      "A goal attempt is optional if readiness is missing. Log a scaled or controlled effort and carry the goal forward.",
+      "A goal attempt is optional if readiness is missing. Log a scaled or controlled effort and carry the goal forward to a reattempt day.",
   },
 ];
 
@@ -198,7 +198,7 @@ function buildSession(
         date === BIRTHDAY
           ? "Happy 45th, Brooks."
           : "Outside the training block",
-      detail: date === BIRTHDAY ? "Celebrate your birthday and recover from Sunday's Murph. Gentle walking and mobility only; continue recovery through May 12 and resume running when soreness and easy effort are normal." : "Review your journal, recover, and choose what comes next.",
+      detail: date === BIRTHDAY ? "Celebrate your birthday and recover from Sunday's attempt or reattempt day. Gentle walking and mobility only; continue recovery through May 12 and resume running when soreness and easy effort are normal." : "Review your journal, recover, and choose what comes next.",
     };
   if (dow === 6)
     s = {

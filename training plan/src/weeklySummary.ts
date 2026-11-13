@@ -1,4 +1,4 @@
-import { addDays, type Session, type Workout } from "./plan";
+import { addDays, BIRTHDAY, dayDiff, type Session, type Workout } from "./plan";
 import { sunday } from "./calendar";
 import { weeklyWeight, type WeightMeasurement } from "./weight";
 
@@ -20,8 +20,10 @@ export function weeklySummary(sessions: Session[], logs: Workout[], weights: Wei
   const showResults = start >= WEEK_RESULTS_START && start <= sunday(today);
   const recorded = logs.filter(l=>l.date>=start && l.date<=through && l.status!=="skipped");
   const weight = weeklyWeight(start,weights.filter(w=>w.date<=through));
+  // Countdown to the May 11 birthday, measured from the last day (Saturday) of the week.
+  const daysLeft = Math.max(0, dayDiff(BIRTHDAY, end));
   return {
-    start,end,showResults,
+    start,end,showResults,daysLeft,weeksLeft:Math.round(daysLeft/7*10)/10,
     status:start>sunday(today)?"Upcoming":end<today?"Week ended":"So far",
     plannedMiles:sessions.reduce((sum,s)=>sum+s.miles,0),
     plannedMurphMinutes:sessions.reduce((sum,s)=>sum+(s.murphMinutes??0),0),

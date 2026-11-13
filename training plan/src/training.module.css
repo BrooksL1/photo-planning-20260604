@@ -1293,8 +1293,8 @@
 .calendarToday { border: 2px solid #5f7e43; }
 .cellLogged { color: #3a6435; margin-top: auto; font-weight: 600; }
 .workoutDetails { padding: 0 28px 24px; line-height: 1.7; font-size: 14px; }
-.workoutDetails dl { display: grid; grid-template-columns: 100px 1fr; gap: 12px; background: #f1f3ea; padding: 18px; border-radius: 8px; }
-.workoutDetails dt { font-weight: 600; }
+.workoutDetails dl { display: grid; grid-template-columns: 100px 1fr; gap: 12px; background: #0d2226; color: var(--ink); border: 1px solid var(--line); padding: 18px; border-radius: 8px; }
+.workoutDetails dt { font-weight: 600; color: var(--mint); }
 .workoutDetails dd { margin: 0; }
 .workoutDetails h3 { margin-top: 20px; font-size: 15px; }
 .workoutDetails button { display: block; margin: 8px 0; }
