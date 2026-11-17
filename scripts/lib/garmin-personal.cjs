@@ -60,6 +60,8 @@ function weightIdentityMap(raw, previous, existing = {}) {
   const mapping = { ...existing };
   for (const old of previous) {
     if (Object.values(mapping).includes(old.id)) continue;
+    const exact = raw.find(w => normalizeWeight(w).measurement_time_utc === old.measuredAt);
+    if (exact) { mapping[normalizeWeight(exact).measurement_time_utc] = old.id; continue; }
     const day = raw.filter(w => w.calendarDate === old.date);
     if (!day.length) continue;
     const matches = day.filter(w => Math.abs(normalizeWeight(w).weight_kg / 0.45359237 - old.pounds) < 0.01);

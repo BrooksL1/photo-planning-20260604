@@ -37,6 +37,13 @@ test('old connector weight IDs survive migration to actual Garmin timestamps wit
   assert.equal(map[new Date(raw[0].timestampGMT).toISOString()], old[0].id);
   assert.throws(() => weightIdentityMap([...raw, { ...raw[0], timestampGMT: 1794837601000 }], old), /ambiguous/);
 });
+test('two real weigh-ins at the same weight on the same day retain their precise identities', () => {
+  const raw = [{ calendarDate: '2026-11-16', timestampGMT: 1794837600000, weight: 87300 }, { calendarDate: '2026-11-16', timestampGMT: 1794837601000, weight: 87300 }];
+  const previous = raw.map(w => ({ id: new Date(w.timestampGMT).toISOString(), measuredAt: new Date(w.timestampGMT).toISOString(), date: w.calendarDate, pounds: 87.3 / 0.45359237 }));
+  const mapping = weightIdentityMap(raw, previous);
+  assert.equal(Object.keys(mapping).length, 2);
+  for (const p of previous) assert.equal(mapping[p.measuredAt], p.id);
+});
 test('activity pagination continues through short pages and includes multisport child legs', async () => {
   const urls = [];
   const api = new GarminPersonal('private-test-key', { interval: 0, sleep: async () => {}, fetcher: async (url, options) => {
