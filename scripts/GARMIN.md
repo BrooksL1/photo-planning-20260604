@@ -77,7 +77,9 @@ All source data is private under
 - `activities/<Garmin ID>/details.json`, `workouts.json`, and `original.zip`:
   full API detail and the original recording, usually a FIT file within a ZIP.
 - `workout-history.json`: readable normalized activity and weight records for
-  local AI tools or a deliberate manual upload to an assistant.
+  local AI tools or a deliberate manual upload to an assistant. `bodyMeasurements`
+  contains timed measurements; `datedWeights` preserves historical weights with
+  a known calendar date and an explicitly unknown measurement time.
 - `account-exports/`: intact complete-account ZIPs and file manifests. These
   include data categories outside the workout importer. They are not published.
 - `latest-import.json`: the fresh input passed to BrooksL's existing importer.
@@ -85,7 +87,8 @@ All source data is private under
 - `progress.json`: progress during original-file downloads.
 - `weights-needing-review.json`: original historical entries lacking usable
   measurement fields; these are retained privately and not converted into
-  invented weigh-ins.
+  invented timed weigh-ins. Records with a valid date and weight remain available
+  in the readable export's `datedWeights` array.
 
 Original files may contain precise GPS and other sensitive records. They remain
 private. `--publish` sends only normalized workout statistics and recorded
