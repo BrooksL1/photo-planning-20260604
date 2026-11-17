@@ -1,4 +1,5 @@
 import type { Session, Settings } from "./plan";
+import { fridaySession } from "./fridayPlan";
 import { ATTEMPTS, BIRTHDAY, CHALLENGE_START, REATTEMPT_DATES, TAPER_START } from "./challenge";
 
 export const REVISED_START = "2026-11-07";
@@ -8,26 +9,8 @@ const weekday = (date: string) => new Date(date + "T12:00:00Z").getUTCDay();
 // Public workload adjustments contain no calendar locations, titles, or travel records.
 const maintenance = [["2026-11-12", "2026-11-13"], ["2026-11-24", "2026-11-28"], ["2026-12-07", "2026-12-08"], ["2026-12-27", "2027-01-02"], ["2027-01-21", "2027-01-24"]];
 const recovery = [["2027-01-11", "2027-01-14"], ["2027-02-09", "2027-02-15"]];
-type Friday = { vest: number[]; body: number[]; minutes: number };
-// From February the Friday session converts partitioned rounds into larger blocks with the vest.
-const fridays: Record<string, Friday> = {
-  "2027-02-05": {vest:[25,50,75],body:[25,50,75],minutes:40},
-  "2027-02-19": {vest:[0,0,0],body:[20,40,60],minutes:20},
-  "2027-02-26": {vest:[35,70,105],body:[25,50,75],minutes:45},
-  "2027-03-05": {vest:[50,100,150],body:[25,50,75],minutes:50},
-  "2027-03-12": {vest:[65,130,195],body:[25,50,75],minutes:60},
-  "2027-03-19": {vest:[80,160,240],body:[20,40,60],minutes:60},
-  "2027-03-26": {vest:[65,130,195],body:[15,30,45],minutes:50},
-  "2027-04-02": {vest:[0,0,0],body:[20,40,60],minutes:20},
-  "2027-04-09": {vest:[0,0,0],body:[6,20,0],minutes:10},
-};
-// Friday rounds of 5 kipping pull-ups / 10 push-ups / 15 squats (1/20 of Murph each), one more round per week.
-// Bar sessions never jump more than 2 rounds above the previous bar session, even after a trip.
-const ROUNDS: Record<string, number> = {"2026-11-13":10,"2026-11-20":11,"2026-11-27":12,"2026-12-04":13,"2026-12-11":14,"2026-12-18":15,"2026-12-25":16,"2027-01-01":17,"2027-01-08":18,"2027-01-29":20};
-const roundsOn = (date: string) => Object.entries(ROUNDS).filter(([d]) => d <= date).reduce((_, [, r]) => r, 10);
 const roundMinutes = (n: number) => 2 * Math.min(n, 5) + 2.5 * Math.max(0, n - 5);
 const clock = (minutes: number) => `${Math.floor(minutes)}:${String(Math.round((minutes % 1) * 60)).padStart(2, "0")}`;
-const sets = (total: number, size: number) => `${Math.floor(total / size)} × ${size}${total % size ? ` + 1 × ${total % size}` : ""} = ${total}`;
 const easy = "RPE 3–4, around 135–145 bpm with full-sentence conversation. Slow or walk hills if effort rises; 155 bpm at RPE 6 is too hard for an easy run.";
 const baseline = "November 9 baseline: strict unvested pull-up sets 7/4/3/3/4 with 90-second rests (21 total; last set to failure), and push-up sets 15/15/15/15/10 with 60-second rests (70 total; near failure). These are demanding test totals, not repeatable working-set targets. Keep working effort around RPE 6–7; HR is not a calisthenics rep target. Rest until breathing settles and rep quality returns. ";
 const reserve = "Keep at least 2–3 clean reps in reserve. Advance only after two comfortable exposures with normal recovery. Otherwise repeat or reduce the previous dose. Reps use full range: chin above the bar and full elbow extension; chest to floor, straight body, full push-up lockout.";
@@ -45,19 +28,21 @@ function challengeSession(original: Session): Session {
   if (original.trip || original.tag === "Re-entry" || original.title === "Recover from Murph") return {...original, murphMinutes:0};
   if (ATTEMPTS.some(a=>a.goal!=="Murph" && daysBetween(date,a.date)===1) || REATTEMPT_DATES.some(d=>daysBetween(date,d)===1)) return {...original,kind:"recovery",miles:0,minutes:25,murphMinutes:0,tag:"Post-attempt recovery",title:"Recovery · walking and mobility",detail:"Recover from Sunday's attempt or reattempt day. Walk and mobilize gently; no make-up work. Resume easy running only when soreness and effort are normal."};
   if (REATTEMPT_DATES.some(d=>d===date)) return {...original,kind:"run",miles:5,minutes:55,murphMinutes:0,tag:"Reattempt day",title:"Reattempt day · one unmet goal, or an easy run",
-    detail:`Default: 5 easy miles, ${easy} This is an open reattempt day for whichever goal is still unmet: Murph (about 75 minutes with preparation; 20 lb vest, 1 mile, 100 pull-ups, 200 push-ups, 300 squats, 1 mile), the 5K at 7:00/mile (about 21:45), or the 10K in 45:00 (about 7:15/mile). Attempt ONE goal only, and only with normal recovery, a suitable route and weather, and no hard session in the previous 3 days. Warm up 10–15 minutes for a running goal. Do not attempt more than one goal on the same day; the other reattempt day remains available. If you attempt Murph, replace the easy run with its 2 miles and treat the next three days as walking and mobility. If everything is already achieved, keep this an easy run.`};
-  const maintenanceMiles: Record<string,number> = {"2027-04-15":3,"2027-04-16":2,"2027-04-20":5,"2027-04-21":4.5,"2027-04-22":4.5,"2027-04-23":3,"2027-04-27":4,"2027-04-28":4,"2027-04-29":4,"2027-04-30":3,"2027-05-04":4.5,"2027-05-05":4,"2027-05-06":3.5,"2027-05-07":2};
+    detail:`Default: 5 easy miles, ${easy} This is an open reattempt day for whichever goal is still unmet: Murph (about 75 minutes with preparation; 20 lb vest, 1 mile, 100 pull-ups, 200 push-ups, 300 squats, 1 mile), the 5K at 7:00/mile (about 21:45), or the 10K in 45:00 (about 7:15/mile). Attempt ONE goal only, and only with normal recovery, a suitable route and weather, and no hard session in the previous 3 days. Warm up 10–15 minutes for a running goal. Do not attempt more than one goal on the same day; May 9 is the final reattempt date before your birthday. If you attempt Murph, replace the easy run with its 2 miles and treat the next three days as walking and mobility. If everything is already achieved, keep this an easy run.`};
+  const maintenanceMiles: Record<string,number> = {"2027-04-22":3,"2027-04-23":2,"2027-04-27":5,"2027-04-28":4.5,"2027-04-29":4.5,"2027-04-30":3,"2027-05-04":4,"2027-05-05":4,"2027-05-06":4,"2027-05-07":2};
   const miles = maintenanceMiles[date] ?? (dow === 5 ? 2 : 3);
-  const technique = ["2027-04-21","2027-05-05"].includes(date);
+  const technique = ["2027-04-28","2027-05-05"].includes(date);
   return {...original,kind:"run",miles,minutes:Math.ceil(miles*11)+(technique?10:0),murphMinutes:technique?10:0,tag:"Challenge maintenance",
     title:technique ? "Easy run + light upper-body technique" : "Easy maintenance run",
-    detail:`${miles} easy miles. ${easy} ${technique ? "Optional 10 minutes unvested technique including preparation: 3 × 2 strict pull-ups, then 2 × 10 clean push-ups; rest 60–90 seconds, RPE at most 5, with at least 3 clean reps in reserve. No squats, vest, butterfly work or failure. Skip if soreness remains or if you made an attempt on May 2." : "No threshold or additional interval workout; Sunday attempts replace quality sessions."} ${dow === 5 ? "No Murph practice this Friday; Saturday is rest before Sunday's attempt or reattempt day." : ""} ${date < "2027-04-18" ? "First week after Murph: keep the miles easy and cut them short if your legs are still sore." : ""}`};
+    detail:`${miles} easy miles. ${easy} ${technique ? "Optional 10 minutes unvested technique including preparation: 3 × 2 strict pull-ups, then 2 × 10 clean push-ups; rest 60–90 seconds, RPE at most 5, with at least 3 clean reps in reserve. No squats, vest, butterfly work or failure. Skip if soreness remains after the May 2 10K." : "No threshold or additional interval workout; Sunday attempts replace quality sessions."} ${dow === 5 ? "No Murph practice this Friday; Saturday is rest before Sunday's attempt or reattempt day." : ""} ${date < "2027-04-25" ? "First week after Murph: keep the miles easy and cut them short if your legs are still sore." : ""}`};
 }
 
 export function revisedSession(original: Session, settings: Settings): Session {
   const date = original.date, dow = weekday(date);
   if (date < REVISED_START || date >= BIRTHDAY || dow === 6) return {...original, murphMinutes:0};
   if (date >= CHALLENGE_START) return challengeSession(original);
+  const friday = fridaySession(original);
+  if (friday) return friday;
   const returning = date in returnMiles, taper = date >= TAPER_START;
   let miles = [10,4.5,5.5,4.5,5.5,2,0][dow];
   if (dow === 0 && ["2026-11-08","2026-11-22","2027-03-21"].includes(date)) miles = 8;
@@ -91,23 +76,12 @@ export function revisedSession(original: Session, settings: Settings): Session {
     const assessment = ["2026-12-15","2027-03-02"].includes(date);
     s = {...s,title:assessment?"Measured 5K assessment":taper && !interval && daysBetween(date,TAPER_START) >= 7?"Easy run · reduced load":interval?"Tuesday intervals":"Thursday threshold",
       detail:`${miles} miles TOTAL, including warm-up, recoveries, and cooldown. Run 10–15 minutes easy before the work and at least 8–10 minutes easy afterward. ${assessment ? "A measured 5K assessment replaces intervals today; no additional interval session." : work + "."} Initial pace references: intervals about 8:00–8:15/mile, threshold about 8:40–9:00/mile, based on your last reported 25-minute 5K. Effort overrides pace. Threshold RPE 6–7 often corresponds to 155–165 bpm; intervals RPE 7–8 may reach 165–175 late in reps. Do not chase HR on short repetitions. Future goals of 7:00/mile and about 7:15/mile are not automatic training paces. Shorten the work if needed; keep Thursday controlled before Friday.`};
-  } else if (dow === 5 && date < "2027-02-05") {
-    const n = roundsOn(date), timed = roundMinutes(n), work = Math.ceil(5 + timed);
-    s = {...s,kind:"murph",minutes:Math.ceil(miles*11)+work,murphMinutes:work,title:`Murph rounds · ${n} × (5 / 10 / 15)`,
-      detail:`${miles} easy miles total, ${miles/2} before and ${miles/2} after a ${work}-minute rounds block. Warm up 5 minutes (included): shoulders, hips, ankles. Then ${n} rounds, each 5 kipping pull-ups + 10 push-ups + 15 air squats: ${5*n} pull-ups, ${10*n} push-ups and ${15*n} squats in total, ${n*5}% of full Murph volume, no vest. Pace: rounds 1–5 about 2:00 each, rounds 6–${n} about 2:30 each, about ${clock(timed)} in all. These are working targets, not a race; slow down before form breaks. ${date === "2027-01-29" ? "This is full partitioned Murph volume: 20 rounds. " : ""}Add a round next Friday only if your last three rounds stayed under about 3:00 and your pull-ups stayed clean; otherwise repeat ${n}. Rounds step up one per week, and after a trip or ski week the bar count never jumps more than 2 above your last bar session. Pull-ups take chin over the bar and full elbow extension; push-ups chest to floor with a straight body; squats reach the hip crease below the knee. RPE 5–6, later 6–7; stop a round early rather than grind. Record the block as Garmin Cardio and the runs separately. ${baseline}`};
   } else if (dow === 5) {
-    const f = fridays[date] ?? {vest:[0,0,0],body:[24,60,90],minutes:30};
-    const vested = f.vest.some(n=>n>0);
-    const vestPullSize = date < "2027-03-05" ? 3 : 5;
-    const bodyPullSize = date < "2027-02-22" ? 4 : 5;
-    const labels = ["pull-ups","push-ups","squats"];
-    const blocks = labels.map((label,i)=>f.vest[i]+f.body[i]===0 ? `${label}: none` : `${label}: ${vested ? `${sets(f.vest[i],[vestPullSize,5,15][i])} with 20 lb vest, then ` : ""}${sets(f.body[i],[bodyPullSize,10,15][i])} without vest`).join("; ");
-    const loadedMiles = date === "2027-03-19" ? 1 : ["2027-03-12","2027-03-26"].includes(date) ? .75 : date === "2027-03-05" ? .5 : ["2027-02-05","2027-02-26"].includes(date) ? .25 : 0;
-    s = {...s,kind:"murph",minutes:Math.ceil(miles*11)+f.minutes,murphMinutes:f.minutes,title:taper?"Light unpartitioned technique · taper":"Friday unpartitioned Murph practice",
-      detail:`${miles} running miles total: ${miles/2} before and ${miles/2} after a ${f.minutes}-minute calisthenics block including preparation and rests. Complete the pull-up block, then the push-up block, then the squat block, without alternating movements. Working sets × reps (ceilings within each time allowance): ${blocks}. Pull-ups use regular kipping, never butterfly. Push-ups are clean, full range; squats reach hip crease below knee and finish standing tall. ${vested ? `The vested dose is conditional on comfortable prior sessions${settings.vestReady ? " and your confirmed vest readiness" : "; vest readiness has not been confirmed in settings"}. If not ready, do those reps unvested or repeat a smaller prior dose.` : "No vest."} Rest 90–120 seconds for pull-up sets, 60–90 for push-up sets, and 20–40 for squats. If this means fewer reps fit the time cap, stop at the cap and log actual reps; do not rush rests to reach the ceiling. The first 5 minutes are preparation; split the remaining time approximately 40% pulls, 35% pushes and 25% squats. End each movement block at its time allowance even if reps remain, then move on; preserve time for squats. Future totals require two comfortable exposures at the previous dose; otherwise repeat that dose. Larger pull-up sets are conditional: first demonstrate 5 × 3, then 5 × 4, then 5 × 5 at the same vest load, each comfortably twice; until earned use the prior set size and complete fewer reps in the time allowance. Never transfer an unvested readiness result to vested work. After a reduced week, first repeat the last comfortable dose. ${baseline} Shorten rests only after the existing dose is repeatable. ${loadedMiles ? `Only if the prior loaded progression was comfortable, vest the first ${loadedMiles} mile of EACH run and do the remainder unvested.` : "Both runs are unvested and easy."} RPE 5–6 initially, 6–7 later; stop or reduce if technique fades or effort exceeds 7–8. Time is a cap: log partial work rather than rush or force all reps. Record the calisthenics block as Garmin Cardio and the runs separately. ${reserve}`};
+    // Retain the historical November 13 bodyweight prescription.
+    const n = 10, timed = roundMinutes(n), work = Math.ceil(5 + timed);
+    s = {...s,kind:"murph",minutes:Math.ceil(miles*11)+work,murphMinutes:work,title:"Murph rounds · 10 × (5 / 10 / 15)",
+      detail:`${miles} easy miles total, one before and one after 10 rounds of 5 regular kipping pull-ups, 10 clean push-ups and 15 squats. Totals: 50/100/150, no vest. Allow about ${clock(timed)} for the rounds plus 5 minutes preparation. Keep the effort controlled and record actual reps and time.`};
   }
-  if (taper && dow === 5) s.detail = s.detail.replace("RPE 5–6 initially, 6–7 later; stop or reduce if technique fades or effort exceeds 7–8.", "Taper effort: RPE 4–5, with at least 3 clean reps in reserve. Finish fresh; reduce reps rather than accumulate fatigue.");
-  if (date === "2027-04-09") s = {...s,detail:`2 easy miles, one before and one after up to 10 minutes light upper-body technique, including preparation and rests. No vest. Complete 3 × 2 = 6 strict pull-ups, THEN 2 × 10 = 20 clean push-ups. Rest 60–90 seconds between sets. No squats, kipping or butterfly work today. RPE at most 5, with at least 3 clean reps in reserve; skip upper body if not fully recovered. ${easy} Saturday is rest before Sunday's Murph attempt.`};
   const inWindow = (windows: string[][]) => windows.some(([start,end])=>date>=start&&date<=end);
   const skiReturn = recovery.some(([,end])=>daysBetween(date,end)>0&&daysBetween(date,end)<=2) || original.tag === "Re-entry";
   if (original.trip?.kind === "ski" || inWindow(recovery)) return {...s,kind:"recovery",miles:0,minutes:25,murphMinutes:0,startTime:undefined,tag:"Recovery block",title:"Recovery · walking and mobility",detail:"20–30 minutes gentle walking and mobility. Other leg loading replaces running and squat work during this recovery block. This is reduced running, not necessarily low total workload. Resume gradually when recovered; no make-up sessions."};
@@ -117,10 +91,6 @@ export function revisedSession(original: Session, settings: Settings): Session {
       detail:`3 unvested easy miles. ${easy} If legs remain sore, sleep is poor or easy effort is abnormal, walk instead. No intervals, threshold or squats on these first return mornings. ${upper?"Optional 15-minute upper-body block at 5:30 before running, including preparation and rests: no vest; 2 × 2 = 4 strict pull-ups, THEN 2 × 8 = 16 clean push-ups, resting 90 seconds between sets. RPE at most 5, with at least 3 clean reps in reserve. Skip if not recovered.":"No Murph work today."} Later return targets are ceilings: repeat the last comfortable dose instead of forcing the next mileage increase.`};
   }
   if (original.trip || inWindow(maintenance)) {
-    if (dow === 5) {
-      const n = Math.min(20, roundsOn(date)), work = Math.ceil(5 + n * 1.25);
-      return {...s,miles:2,minutes:22+work,murphMinutes:work,tag:"Travel adjusted",title:`Easy miles + floor-only rounds · ${n} × (10 / 15)`,detail:`One easy mile before and one after a ${work}-minute floor-only block. Warm up 5 minutes (included), then ${n} rounds of 10 clean push-ups + 15 air squats (${10*n} push-ups, ${15*n} squats), about 1:15 per round with only breathing pauses. No pull-up bar or vest is assumed, so pulling is skipped; the bar rounds resume at your last bar count plus at most 2. Hold the pace and drop the last two rounds if form fades. RPE 5–6; stop with 2–3 good reps in reserve. After an overnight flight or poor recovery, replace the workout with walking.`};
-    }
     const quality = dow === 2 || dow === 4, upper = dow === 1 || dow === 3;
     const travelMiles = Math.min(miles,dow === 0?6:quality?4.5:4);
     return {...s,kind:"run",miles:travelMiles,minutes:Math.ceil(travelMiles*11)+(upper?15:0),murphMinutes:upper?15:0,startTime:upper?"05:30":undefined,tag:"Travel adjusted",

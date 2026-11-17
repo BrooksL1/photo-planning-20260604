@@ -706,22 +706,21 @@ export default function TrainingDashboard() {
               </button>
             </div>
             <p className={styles.sectionCopy}>
-              Updated November 8 from your reported 192.5 lb, 25-minute 5K,
-              7 strict pull-ups, 12 regular kipping pull-ups, and 35 clean push-ups.
-              Full weeks build toward 32 running miles: 10 Sunday, 4.5 Monday
-              and Wednesday, 5.5 Tuesday and Thursday, and 2 Friday. Monday
-              and Wednesday upper-body work starts at 5:30 before the easy run;
-              Tuesday has intervals, Thursday threshold, and Friday Murph rounds
-              (5 pull-ups, 10 push-ups, 15 squats per round, one more round
-              each week) until the vest and unpartitioned blocks begin in February. Saturday is rest. Morning durations
-              include rests and preparation; the combined mornings exceed 50
-              minutes. Travel uses shorter sessions where needed; there are no
-              automatic two-day recovery breaks after routine trips or fixed
-              every-fourth-week cutbacks. After skiing, rebuild through 24 and
-              28 miles before full 30–32-mile weeks through March 27, followed by a
-              two-week taper starting March 28. The attempts are Murph on
-              April 11, the 5K on April 18 and the 10K on April 25, with
-              May 2 and May 9 held as reattempt days.
+              Friday progression updated November 17 from your spreadsheet and
+              reported 50/100/150 bodyweight session in about 22 minutes. Full
+              weeks build toward 32 running miles: 10 Sunday, 4.5 Monday and
+              Wednesday, 5.5 Tuesday and Thursday, and 2 Friday. Monday and
+              Wednesday upper-body work starts at 5:30 before the easy run;
+              Tuesday has intervals and Thursday controlled threshold. Friday
+              progresses total reps, adjustable vest load and movement-block size;
+              click a date for exact sets, remaining reps, rests and effort.
+              Saturday is rest. Travel targets require suitable equipment, and
+              recovery takes precedence after skiing. Full running weeks continue
+              through April 3, followed by the two-week taper starting April 4.
+              April 2 is the full 100/200/300 unpartitioned rehearsal in a 20 lb
+              vest. April 9 is 50/100/150 with two miles, all in the 20 lb vest;
+              April 16 has no Murph work. Attempts: Murph April 18, 5K April 25,
+              10K May 2, and one open reattempt May 9.
             </p>
             <div className={styles.phases}>
               {PHASES.map((p, i) => (
@@ -750,7 +749,7 @@ export default function TrainingDashboard() {
               ))}
             </div>
             <h3 className={styles.attemptHeading}>
-              Three goal attempts + two reattempt days
+              Three goal attempts + one reattempt day
             </h3>
             <div className={styles.attempts}>
               {[...ATTEMPTS, ...REATTEMPT_DATES.map(date=>({date,goal:"Reattempt · one unmet goal"}))].sort((a,b)=>a.date.localeCompare(b.date)).map((a) => (

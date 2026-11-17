@@ -16,8 +16,8 @@ const {
   validateLogs,
 } = load("../../training plan/src/plan.ts");
 
-test("Murph attempt 1 opens the challenge on April 11, followed by the 5K and 10K, with May 2 and 9 as reattempts", () => {
-  assert.equal(dayDiff(BIRTHDAY, CHALLENGE_START), 30);
+test("April 18 Murph opens the challenge, followed by April 25 5K and May 2 10K", () => {
+  assert.equal(dayDiff(BIRTHDAY, CHALLENGE_START), 23);
   assert.deepEqual(
     ATTEMPTS.map((a) => a.goal),
     ["Murph", "5K", "10K"],
@@ -25,9 +25,9 @@ test("Murph attempt 1 opens the challenge on April 11, followed by the 5K and 10
   assert.deepEqual(
     ATTEMPTS.map((a) => a.date),
     [
-      "2027-04-11",
       "2027-04-18",
       "2027-04-25",
+      "2027-05-02",
     ],
   );
   for (const a of ATTEMPTS) {
@@ -105,9 +105,9 @@ test("a travel conflict cannot silently remain a challenge attempt", () => {
 test("unpartitioned Murph is the default and its aftermath replaces harder sessions", () => {
   assert.equal(DEFAULT_SETTINGS.partition, "unpartitioned");
   assert.equal(sessionFor("2027-03-05").kind,"murph");
-  assert.match(sessionFor("2027-03-05").detail, /pull-up block, then the push-up block, then the squat block/);
-  assert.match(sessionFor("2027-04-11").detail, /all 100 regular kipping pull-ups/);
-  for (const d of ["2027-05-02", "2027-05-09"]) assert.match(sessionFor(d).detail, /open reattempt day/);
+  assert.match(sessionFor("2027-03-05").detail, /finish all pulls, then all pushes, then all squats/);
+  assert.match(sessionFor("2027-04-18").detail, /all 100 regular kipping pull-ups/);
+  for (const d of ["2027-05-09"]) assert.match(sessionFor(d).detail, /open reattempt day/);
   assert.equal(sessionFor("2027-05-10").kind, "recovery");
   for (const d of ["2027-05-11", "2027-05-12"])
     assert.equal(sessionFor(d).kind, "rest");

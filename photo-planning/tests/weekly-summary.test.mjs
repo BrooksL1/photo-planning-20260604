@@ -20,93 +20,75 @@ test("approved full week totals 32 miles with two quality runs and upper-body-fi
  assert.match(sessions[4].title,/threshold/);
  assert.equal(sessions[5].kind,"murph");
  assert.equal(sessions[6].kind,"rest");
- assert.equal(weeklySummary(sessions,[],[],"2027-01-31").plannedMurphMinutes,100);
+ assert.equal(weeklySummary(sessions,[],[],"2027-01-31").plannedMurphMinutes,105);
 });
 
-test("rehearsal sets, recovery, taper and challenge replace ordinary load",()=>{
- const rehearsal=sessionFor("2027-03-19");
- assert.match(rehearsal.detail,/16 × 5 = 80 with 20 lb vest/);
- assert.match(rehearsal.detail,/32 × 5 = 160 with 20 lb vest/);
- assert.match(rehearsal.detail,/16 × 15 = 240 with 20 lb vest/);
- assert.equal(rehearsal.murphMinutes,60);
- assert.match(rehearsal.rpe,/5–6 initially, later 6–7/);
- assert.match(rehearsal.heartRate,/No HR target for calisthenics/);
- assert.equal(sessionFor("2027-03-21").miles,8);
+test("agreed rehearsal and half Murph survive the taper with truthful weekly targets",()=>{
+ const full=sessionFor("2027-04-02"),half=sessionFor("2027-04-09");
+ assert.deepEqual(full.murphTargets,{pullups:100,pushups:200,squats:300,vest:20,blocks:[100]});
+ assert.deepEqual(half.murphTargets,{pullups:50,pushups:100,squats:150,vest:20,blocks:[50]});
+ assert.equal(full.murphMinutes,55);
+ assert.equal(half.murphMinutes,30);
+ assert.match(full.rpe,/7–8/);
+ assert.match(half.rpe,/6–7/);
+ assert.match(half.detail,/20 lb vest throughout both miles and all calisthenics/);
  assert.equal(sessionFor("2027-02-12").murphMinutes,0);
- assert.equal(sessionFor("2027-03-29").murphMinutes,15);
- assert.equal(sessionFor("2027-03-29").miles,3.5);
- assert.equal(sessionFor("2027-04-05").murphMinutes,15);
- assert.equal(sessionFor("2027-04-05").miles,2.5);
- assert.equal(sessionFor("2027-04-11").murphMinutes,57);
- for(const date of ["2027-05-10"]) {
-  assert.equal(sessionFor(date).kind,"recovery");
-  assert.equal(sessionFor(date).murphMinutes,0);
- }
+ assert.equal(sessionFor("2027-04-16").murphMinutes,0);
+ assert.match(sessionFor("2027-04-16").detail,/No calisthenics or vest/);
+ assert.equal(sessionFor("2027-04-18").murphMinutes,57);
+ assert.equal(sessionFor("2027-05-10").kind,"recovery");
  assert.equal(sessionFor("2027-05-11").miles,0);
 });
 
-test("full pre-taper weeks retain 30–32 miles and taper blocks reduce volume on the new dates",()=>{
- for (const [start,miles] of [["2027-03-07",32],["2027-03-14",32],["2027-03-21",30]]) {
+test("normal weeks preserve running volume through April 3 and taper for the April 18 attempt",()=>{
+ for(const [start,miles] of [["2027-03-07",32],["2027-03-14",32],["2027-03-21",30],["2027-03-28",32]]) {
   const sessions=week(start);
   assert.equal(sessions.reduce((sum,s)=>sum+s.miles,0),miles,start);
   assert.equal(sessions.filter(s=>/Tuesday intervals|Thursday threshold/.test(s.title)).length,2,start);
   assert.ok(sessions.every(s=>s.tag!=="Taper"),start);
  }
- assert.equal(sessionFor("2027-03-26").murphMinutes,50);
- assert.match(sessionFor("2027-03-26").detail,/13 × 5 = 65 with 20 lb vest/);
- for (const [start,miles,murph] of [["2027-03-28",25,50],["2027-04-04",19,40]]) {
+ for(const [start,miles,murph] of [["2027-04-04",25,60],["2027-04-11",19,30]]) {
   const sessions=week(start);
-  assert.equal(sessions.reduce((sum,s)=>sum+s.miles,0),miles,start);
+  assert.equal(weeklySummary(sessions,[],[],"2026-11-17").plannedMiles,miles,start);
   assert.equal(sessions.reduce((sum,s)=>sum+(s.murphMinutes??0),0),murph,start);
   assert.equal(sessions[0].attempt,undefined);
   assert.match(sessions[2].detail,/4 × 1 minute at RPE 7/);
  }
- // Taper totals now match the Sunday–Saturday calendar rows.
- assert.equal(weeklySummary(week("2027-03-28"),[],[],"2026-11-07").plannedMiles,25);
- assert.equal(weeklySummary(week("2027-04-04"),[],[],"2026-11-07").plannedMiles,19);
 });
 
-test("May 2 and May 9 are open reattempt days and nothing substantial follows the Murph week",()=>{
- assert.equal(sessionFor("2027-04-11").attempt,"Murph");
- assert.equal(sessionFor("2027-04-18").attempt,"5K");
- assert.equal(sessionFor("2027-04-25").attempt,"10K");
- for (const d of ["2027-05-02","2027-05-09"]) {
-  const r=sessionFor(d);
-  assert.equal(r.attempt,undefined,d);
-  assert.equal(r.miles,5,d);
-  assert.match(r.detail,/open reattempt day for whichever goal is still unmet/,d);
-  assert.equal(sessionFor(addDays(d,1)).kind,"recovery",d);
- }
- for (const d of ["2027-04-12","2027-04-13","2027-04-14"]) assert.equal(sessionFor(d).title,"Recover from Murph",d);
- for (let d="2027-04-12";d<"2027-05-09";d=addDays(d,1)) {
+test("April 18, April 25, May 2 are the only attempts and May 9 is the sole flexible retry",()=>{
+ assert.equal(sessionFor("2027-04-18").attempt,"Murph");
+ assert.equal(sessionFor("2027-04-25").attempt,"5K");
+ assert.equal(sessionFor("2027-05-02").attempt,"10K");
+ const retry=sessionFor("2027-05-09");
+ assert.equal(retry.attempt,undefined);
+ assert.equal(retry.miles,5);
+ assert.match(retry.detail,/open reattempt day for whichever goal is still unmet/);
+ assert.doesNotMatch(retry.detail,/other reattempt day remains/);
+ for(const d of ["2027-04-19","2027-04-20","2027-04-21"]) assert.equal(sessionFor(d).title,"Recover from Murph",d);
+ for(let d="2027-04-19";d<"2027-05-09";d=addDays(d,1)) {
   const s=sessionFor(d);
   assert.ok((s.murphMinutes??0)<=10,d);
-  if (!["2027-04-18","2027-04-25"].includes(d)) assert.equal(s.attempt,undefined,d);
+  if(!["2027-04-25","2027-05-02"].includes(d)) assert.equal(s.attempt,undefined,d);
  }
 });
 
-test("Sunday attempts replace the long run, Fridays stay light, Saturdays rest and Mondays recover",()=>{
- for (const date of ["2027-04-13","2027-04-20","2027-04-27","2027-05-04"]) assert.equal(sessionFor(date).attempt,undefined,date);
- const light=sessionFor("2027-04-09");
- assert.equal(light.murphMinutes,10);
- assert.match(light.detail,/3 × 2 = 6 strict pull-ups/);
- assert.match(light.detail,/No squats/);
- assert.match(light.rpe,/at most 5/);
- for (const date of ["2027-04-23","2027-04-30","2027-05-07"]) {
+test("Sunday attempts replace long runs, Fridays stay easy, Saturdays rest and Mondays recover",()=>{
+ for(const date of ["2027-04-23","2027-04-30","2027-05-07"]) {
   const s=sessionFor(date);
   assert.equal(s.murphMinutes,0,date);
-  assert.equal(s.miles,{"2027-04-23":3,"2027-04-30":3,"2027-05-07":2}[date],date);
+  assert.equal(s.miles,{"2027-04-23":2,"2027-04-30":3,"2027-05-07":2}[date],date);
  }
- for (const date of ["2027-04-17","2027-04-24","2027-05-01","2027-05-08"]) assert.equal(sessionFor(date).kind,"rest",date);
- for (const date of ["2027-04-19","2027-04-26","2027-05-03","2027-05-10"]) {
+ for(const date of ["2027-04-17","2027-04-24","2027-05-01","2027-05-08"]) assert.equal(sessionFor(date).kind,"rest",date);
+ for(const date of ["2027-04-19","2027-04-26","2027-05-03","2027-05-10"]) {
   const s=sessionFor(date);
   assert.equal(s.kind,"recovery",date);
   assert.equal(s.miles,0,date);
   assert.equal(s.murphMinutes,0,date);
  }
- assert.equal(sessionFor("2027-04-18").miles,5/1.609344+2);
- assert.equal(sessionFor("2027-04-25").miles,10/1.609344+2);
- assert.equal(sessionFor("2027-04-11").miles,2);
+ assert.equal(sessionFor("2027-04-25").miles,5/1.609344+2);
+ assert.equal(sessionFor("2027-05-02").miles,10/1.609344+2);
+ assert.equal(sessionFor("2027-04-18").miles,2);
 });
 
 test("Garmin Cardio counts measured minutes without claiming reps or RX; replay updates time once",()=>{
@@ -172,17 +154,18 @@ test("post-ski running and vested work rebuild before peak practice",()=>{
  for(const d of ["2027-02-16","2027-02-17"]){const s=sessionFor(d);assert.equal(s.miles,3);assert.match(s.detail,/No intervals, threshold or squats/);}
  assert.equal(sessionFor("2027-02-23").title,"Tuesday intervals");
  assert.equal(sessionFor("2027-03-02").title,"Measured 5K assessment");
- assert.match(sessionFor("2027-02-05").detail,/8 × 3 \+ 1 × 1 = 25 with 20 lb vest/);
- assert.match(sessionFor("2027-02-26").detail,/11 × 3 \+ 1 × 2 = 35 with 20 lb vest/);
- assert.match(sessionFor("2027-03-19").detail,/16 × 5 = 80 with 20 lb vest/);
+ assert.equal(sessionFor("2027-02-05").murphTargets.vest,14);
+ assert.equal(sessionFor("2027-02-26").murphTargets.vest,16);
+ assert.equal(sessionFor("2027-03-19").murphTargets.vest,18);
+ assert.match(sessionFor("2027-02-19").detail,/After reduced training, first repeat or reduce/);
  assert.equal(sessionFor("2027-03-21").miles,8);
 });
 
 test("attempt weeks retain easy aerobic work and include warm-up/cooldown miles",()=>{
  const totals=["2027-04-18","2027-04-25","2027-05-02"].map(d=>Number(weeklySummary(week(d),[],[],"2026-11-08").plannedMiles.toFixed(1)));
- assert.deepEqual(totals,[22.1,23.2,19]);
- for(const d of ["2027-04-18","2027-04-25"]) assert.match(sessionFor(d).detail,/1 easy warm-up mile and 1 easy cooldown mile/);
- for(const d of ["2027-04-20","2027-04-22","2027-04-27","2027-04-29","2027-05-04"]) {
+ assert.deepEqual(totals,[7,22.1,22.2]);
+ for(const d of ["2027-04-25","2027-05-02"]) assert.match(sessionFor(d).detail,/1 easy warm-up mile and 1 easy cooldown mile/);
+ for(const d of ["2027-04-27","2027-04-29","2027-05-04","2027-05-06"]) {
   const s=sessionFor(d);
   assert.equal(s.kind,"run",d);
   assert.ok(s.miles>=4,d);

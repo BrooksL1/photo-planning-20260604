@@ -42,14 +42,14 @@ test("a corrected import replaces stale automatic stats but keeps newer manual e
   assert.equal(importAdvanced("2026-11-09T04:00:00Z","2026-11-09T04:00:00Z"),false);
   assert.equal(importAdvanced(null,null),false);
 });
-test("new working sets reflect repeatability rather than failure totals; Friday preserves squat time",()=>{
+test("new working sets reflect repeatability rather than failure totals; Friday uses the agreed weighted prescription",()=>{
   const monday=sessionFor("2026-11-16"),wednesday=sessionFor("2026-11-11"),friday=sessionFor("2026-11-20");
   assert.match(monday.detail,/5 × 3 = 15 strict pull-ups before 5 × 10 = 50 clean push-ups/);
   assert.match(monday.detail,/Rest 120–150 seconds/);assert.match(monday.detail,/90–120 seconds between push-up/);
   assert.match(wednesday.detail,/4 × 3 = 12 regular kipping pull-ups before 4 × 10 = 40 clean push-ups/);
-  assert.match(friday.detail,/11 rounds, each 5 kipping pull-ups \+ 10 push-ups \+ 15 air squats/);assert.match(friday.detail,/55 pull-ups, 110 push-ups and 165 squats/);
-  assert.match(friday.detail,/rounds 1–5 about 2:00 each, rounds 6–11 about 2:30 each/);assert.match(friday.detail,/no vest/);
-  assert.match(sessionFor("2027-02-05").detail,/preserve time for squats/);assert.match(sessionFor("2027-02-05").detail,/Never transfer an unvested readiness result to vested work/);
+  assert.deepEqual(friday.murphTargets,{pullups:50,pushups:100,squats:150,vest:8,blocks:Array(10).fill(5)});
+  assert.match(friday.detail,/small sets and rests are allowed/);
+  assert.match(friday.detail,/Record the calisthenics and rests as Garmin Cardio/);
   assert.equal(monday.miles,4.5);assert.equal(wednesday.miles,4.5);
   assert.match(sessionFor("2027-02-01").detail,/earned only after two comfortable exposures/);
 });
